@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Cifra",
+    "slug": "cifra",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "cifra",
+    "userInterfaceStyle": "automatic",
+    "plugins": ["expo-router"],
+    "android": {
+      "package": "br.com.usarcifra.app"
+    },
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
