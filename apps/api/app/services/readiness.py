@@ -26,7 +26,13 @@ async def check_postgres(settings: Settings) -> None:
 async def check_redis(settings: Settings) -> None:
     client = redis.from_url(settings.redis_url, socket_connect_timeout=3, socket_timeout=3)
     try:
-        await client.ping()
+        ping_result = client.ping()
+        if isinstance(ping_result, bool):
+            if not ping_result:
+                raise ConnectionError("Redis ping failed")
+        else:
+            if not await ping_result:
+                raise ConnectionError("Redis ping failed")
     finally:
         await client.aclose()
 

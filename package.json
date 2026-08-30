@@ -6,12 +6,31 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
+    "lint:format": "turbo lint:format",
+    "format": "prettier --write . && pnpm --filter @cifra/api format",
+    "format:check": "prettier --check . && pnpm --filter @cifra/api format:check",
     "typecheck": "turbo typecheck",
-    "test": "turbo test"
+    "test": "turbo test",
+    "test:coverage": "turbo test:coverage --filter=@cifra/api",
+    "security:secrets": "secretlint \"**/*\"",
+    "security:gitleaks": "gitleaks git --config .gitleaks.toml --redact",
+    "security:trivy": "trivy fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --exit-code 1 --skip-dirs node_modules --skip-dirs apps/api/.venv --skip-dirs imports .",
+    "security:dependencies": "pnpm audit --audit-level high && pnpm --filter @cifra/api security:dependencies",
+    "zero-comments": "python scripts/check_comments.py",
+    "zero-comments:test": "python -m unittest scripts/test_check_comments.py",
+    "quality": "pnpm lint && pnpm lint:format && pnpm format:check && pnpm zero-comments && pnpm typecheck && pnpm test:coverage",
+    "ci": "pnpm quality && pnpm test && pnpm build && pnpm security:secrets"
   },
   "devDependencies": {
+    "@commitlint/cli": "21.2.2",
+    "@commitlint/config-conventional": "21.2.2",
+    "@secretlint/secretlint-rule-pattern": "13.0.5",
+    "@secretlint/secretlint-rule-preset-recommend": "13.0.5",
+    "prettier": "3.9.6",
+    "secretlint": "13.0.5",
     "turbo": "2.10.12",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
   },
   "engines": {
     "node": ">=22"

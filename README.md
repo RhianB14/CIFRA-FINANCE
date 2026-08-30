@@ -49,7 +49,13 @@ pnpm build
 
 `pnpm typecheck` executa `tsc --noEmit` nos workspaces TypeScript.
 
-`pnpm test` executa os testes reais da API FastAPI via Turborepo: o workspace `@cifra/api` roda `uv run pytest -q`, e qualquer falha do pytest interrompe o comando com exit code diferente de zero. A task `test` do Turbo roda sem cache para sempre executar os testes de verdade. A suíte atual contém os três testes de comportamento da API e um teste adicional de isolamento dos overrides. Nesta fase não existem testes de front-end; a suíte Jest completa entra na F0.5.
+`pnpm test` executa testes reais via Turborepo em quatro workspaces: pytest na API FastAPI, Vitest no web, Jest no mobile e Vitest no `@cifra/api-client`. Qualquer falha interrompe o comando com exit code diferente de zero. A task `test` do Turbo roda sem cache para sempre executar os testes de verdade.
+
+`pnpm test:coverage` executa a cobertura da API com branch coverage, mínimo total de 70% e mínimo de 85% em `apps/api/app/services/`.
+
+`pnpm ci` executa os gates locais equivalentes à CI publicada. As auditorias de dependências e os scanners reproduzíveis são executados separadamente por `pnpm security:dependencies`, `pnpm security:gitleaks` e `pnpm security:trivy`.
+
+`uvx pre-commit==4.6.2 install` instala os hooks de commit e `uvx pre-commit==4.6.2 install --hook-type commit-msg` instala o commitlint.
 
 `pnpm build` compila os workspaces que possuem build.
 

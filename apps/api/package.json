@@ -4,6 +4,12 @@
   "private": true,
   "scripts": {
     "lint": "uv run ruff check .",
-    "test": "uv run pytest -q"
+    "lint:format": "uv run ruff format --check .",
+    "format": "uv run ruff format .",
+    "format:check": "uv run ruff format --check .",
+    "typecheck": "uv run mypy --strict app tests",
+    "test": "uv run pytest -q",
+    "test:coverage": "uv run pytest --cov=app --cov-branch --cov-report=term-missing --cov-report=xml --cov-fail-under=70 && uv run coverage report --include=app/services/* --fail-under=85 --show-missing",
+    "security:dependencies": "uv run pip-audit"
   }
 }

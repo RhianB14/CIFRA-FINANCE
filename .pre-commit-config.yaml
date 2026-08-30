@@ -1,0 +1,52 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+  - repo: local
+    hooks:
+      - id: ruff-lint
+        name: Ruff lint
+        entry: pnpm --filter @cifra/api lint
+        language: system
+        pass_filenames: false
+      - id: ruff-format
+        name: Ruff format check
+        entry: pnpm --filter @cifra/api format:check
+        language: system
+        pass_filenames: false
+      - id: mypy-strict
+        name: mypy strict
+        entry: pnpm --filter @cifra/api typecheck
+        language: system
+        pass_filenames: false
+      - id: eslint
+        name: ESLint
+        entry: pnpm lint
+        language: system
+        pass_filenames: false
+      - id: prettier
+        name: Prettier check
+        entry: pnpm format:check
+        language: system
+        pass_filenames: false
+      - id: secretlint
+        name: secretlint
+        entry: pnpm security:secrets
+        language: system
+        pass_filenames: false
+      - id: zero-comments
+        name: Zero comments and docstrings
+        entry: python scripts/check_comments.py
+        language: system
+        pass_filenames: false
+      - id: commitlint
+        name: commitlint
+        entry: pnpm exec commitlint --edit
+        language: system
+        stages: [commit-msg]
+        pass_filenames: true

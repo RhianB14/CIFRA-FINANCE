@@ -9,6 +9,9 @@
       "dependsOn": ["^build"],
       "outputs": [".next/**", "dist/**"]
     },
+    "lint:format": {
+      "dependsOn": ["^lint:format"]
+    },
     "lint": {
       "dependsOn": ["^lint"]
     },
@@ -18,6 +21,11 @@
     "test": {
       "dependsOn": ["^typecheck"],
       "outputs": ["coverage/**"],
+      "cache": false
+    },
+    "test:coverage": {
+      "dependsOn": ["^typecheck"],
+      "outputs": ["coverage/**", "coverage.xml", "htmlcov/**"],
       "cache": false
     }
   }

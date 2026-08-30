@@ -8,7 +8,8 @@
     "android": "expo start --android",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "validate": "expo config --type public"
+    "validate": "expo config --type public",
+    "test": "jest --runInBand"
   },
   "dependencies": {
     "@cifra/api-client": "workspace:*",
@@ -28,9 +29,12 @@
   },
   "devDependencies": {
     "@react-native/metro-config": "0.86.3",
+    "@testing-library/react-native": "14.0.1",
+    "@types/jest": "29.5.14",
     "@types/react": "19.2.18",
     "eslint": "9.39.2",
     "eslint-config-expo": "57.0.2",
+    "jest-expo": "57.0.5",
     "typescript": "6.0.3"
   }
 }
