@@ -1,8 +1,0 @@
-# Excecoes escopadas ao scan da imagem cifra-web (security.yml, job image-scan).
-# Justificativa: pacotes internos do bundle do npm 12.0.2 (ferramenta de build, nao runtime da app).
-# Correcao existe nas libs upstream mas ainda nao foi embarcada pelo npm. Reavaliar a cada npm update.
-# Expiram em 2026-12-31 (exp: e aplicado pelo trivy).
-CVE-2026-14257 exp:2026-12-31
-CVE-2026-69152 exp:2026-12-31
-CVE-2026-73566 exp:2026-12-31
-CVE-2026-69192 exp:2026-12-31

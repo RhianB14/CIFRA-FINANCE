@@ -4,6 +4,8 @@
 
 Use Node.js 22.23.2, pnpm 11.24.0, Python 3.11, uv 0.12.6, Docker Desktop 29+ e Docker Compose 5+. Execute `pnpm install --frozen-lockfile` na raiz e `uv sync --frozen` em `apps/api`.
 
+Os scripts usam exclusivamente `uv run`/`uvx` (nunca `python` global). O binario `gitleaks` 8.28.0 precisa estar no PATH do usuario (por exemplo em `%USERPROFILE%\.local\bin` no Windows ou `~/.local/bin` no Linux); o `pnpm verify` falha imediatamente se ele estiver ausente.
+
 Instale os hooks com `uvx pre-commit==4.6.2 install` e `uvx pre-commit==4.6.2 install --hook-type commit-msg`.
 
 ## Branches e commits
@@ -18,10 +20,12 @@ Antes de abrir um PR, execute:
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm ci
-pnpm security:dependencies
-uvx pre-commit run --all-files
+pnpm verify
+pnpm run security:dependencies
+uvx pre-commit==4.6.2 run --all-files
 ```
+
+`pnpm verify` nao colide com nenhum comando interno do pnpm; o antigo `pnpm ci` foi removido porque `pnpm ci` e um comando interno de instalacao congelada.
 
 `pnpm test` executa testes reais da API, web, mobile e api-client. `pnpm test:coverage` exige cobertura total da API de pelo menos 70% e cobertura de `apps/api/app/services/` de pelo menos 85%.
 
@@ -35,7 +39,7 @@ Código e configuração não podem conter comentários ou docstrings. A políti
 
 Nunca versione `.env`, chaves, certificados, tokens, PDFs, extratos ou arquivos em `imports/`. `docs/domain-validation.csv` contém dados financeiros locais e deve permanecer ignorado. `.env.example` contém somente valores fictícios conhecidos.
 
-Execute `pnpm security:secrets` antes do PR. Exceções de segurança exigem escopo mínimo, justificativa, prazo e revisão humana.
+Execute `pnpm run security:secrets:stage` a cada commit (o hook pre-commit ja faz isso) e `pnpm run security:secrets:history` antes do PR: ele empacota o historico alcancavel e escaneia com o gitleaks, falhando se o pacote estiver vazio. Excecoes de seguranca exigem escopo minimo, justificativa, prazo e revisao humana; veja `docs/security-exceptions.md`.
 
 ## Pull requests
 

@@ -8,9 +8,24 @@ from pathlib import Path
 PYTHON_SUFFIXES = {".py"}
 SLASH_SUFFIXES = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".css"}
 HASH_SUFFIXES = {".yaml", ".yml"}
-HTML_SUFFIXES = {".html", ".htm"}
+TOML_SUFFIXES = {".toml", ".lock"}
+INI_SUFFIXES = {".ini", ".cfg", ".conf"}
+MARKUP_SUFFIXES = {".html", ".htm", ".xml", ".svg"}
 SQL_SUFFIXES = {".sql"}
-CONFIG_NAMES = {"Dockerfile"}
+EXEMPT_SUFFIXES = {".md", ".markdown", ".rst", ".txt", ".json", ".csv"}
+HASH_NAMES = {
+    "Dockerfile",
+    ".gitignore",
+    ".dockerignore",
+    ".prettierignore",
+    ".eslintignore",
+    ".npmignore",
+    ".gitattributes",
+    ".env.example",
+    ".htaccess",
+    ".trivyignore",
+}
+INI_NAMES = {".editorconfig", ".npmrc", ".flake8"}
 SKIPPED_NAMES = {"next-env.d.ts"}
 
 
@@ -21,6 +36,37 @@ def tracked_files() -> list[Path]:
         capture_output=True,
     ).stdout.decode()
     return [Path(item) for item in output.split("\0") if item]
+
+
+def classify(path: Path) -> str:
+    if path.name in SKIPPED_NAMES:
+        return "exempt"
+    if path.name in INI_NAMES:
+        return "ini"
+    if path.name in HASH_NAMES or path.name.startswith(".trivyignore"):
+        return "hash"
+    suffix = path.suffix
+    if suffix in PYTHON_SUFFIXES:
+        return "python"
+    if suffix in SLASH_SUFFIXES:
+        return "slash"
+    if suffix in HASH_SUFFIXES:
+        return "hash"
+    if suffix in TOML_SUFFIXES:
+        return "toml"
+    if suffix in INI_SUFFIXES:
+        return "ini"
+    if suffix in MARKUP_SUFFIXES:
+        return "markup"
+    if suffix in SQL_SUFFIXES:
+        return "sql"
+    if suffix in EXEMPT_SUFFIXES:
+        return "exempt"
+    try:
+        path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, ValueError):
+        return "binary"
+    return "unknown"
 
 
 def python_violations(path: Path, text: str) -> list[int]:
@@ -105,6 +151,15 @@ def hash_violations(text: str) -> list[int]:
     return violations
 
 
+def ini_violations(text: str) -> list[int]:
+    violations: list[int] = []
+    for number, line in enumerate(text.splitlines(), 1):
+        stripped = line.lstrip()
+        if stripped.startswith(";") or hash_violations(line):
+            violations.append(number)
+    return violations
+
+
 def marker_violations(text: str, markers: tuple[str, ...]) -> list[int]:
     return [
         number
@@ -114,38 +169,47 @@ def marker_violations(text: str, markers: tuple[str, ...]) -> list[int]:
 
 
 def violations(path: Path) -> list[int]:
-    if path.name in SKIPPED_NAMES or not path.exists():
+    if not path.exists():
         return []
     text = path.read_text(encoding="utf-8")
-    if path.suffix in PYTHON_SUFFIXES:
+    kind = classify(path)
+    if kind == "python":
         return python_violations(path, text)
-    if path.suffix in SLASH_SUFFIXES:
+    if kind == "slash":
         return slash_violations(text)
-    if path.suffix in HASH_SUFFIXES or path.name in CONFIG_NAMES:
+    if kind == "hash" or kind == "toml":
         return hash_violations(text)
-    if path.suffix in HTML_SUFFIXES:
+    if kind == "ini":
+        return ini_violations(text)
+    if kind == "markup":
         return marker_violations(text, ("<!--", "-->"))
-    if path.suffix in SQL_SUFFIXES:
+    if kind == "sql":
         return marker_violations(text, ("--", "/*", "*/"))
     return []
 
 
-def relevant(path: Path) -> bool:
-    return (
-        path.suffix in PYTHON_SUFFIXES | SLASH_SUFFIXES | HASH_SUFFIXES | HTML_SUFFIXES | SQL_SUFFIXES
-        or path.name in CONFIG_NAMES
-    )
-
-
 def main() -> int:
-    paths = [Path(item) for item in sys.argv[1:]] if len(sys.argv) > 1 else tracked_files()
-    findings = [(path, violations(path)) for path in paths if relevant(path)]
-    failed = False
-    for path, lines in findings:
-        for line in lines:
+    arguments = sys.argv[1:]
+    explicit = bool(arguments)
+    paths = [Path(item) for item in arguments] if explicit else tracked_files()
+    status = 0
+    for path in paths:
+        if not path.exists():
+            print(f"{path}: file not found")
+            raise SystemExit(2)
+        kind = classify(path)
+        if kind == "exempt":
+            continue
+        if kind == "binary":
+            print(f"{path}: binary file, consciously not scanned for comments")
+            continue
+        if kind == "unknown":
+            print(f"{path}: unknown format, refusing silent success")
+            raise SystemExit(2)
+        for line in violations(path):
             print(f"{path}:{line}: forbidden comment or docstring")
-            failed = True
-    return 1 if failed else 0
+            status = 1
+    return status
 
 
 if __name__ == "__main__":

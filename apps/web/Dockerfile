@@ -1,7 +1,13 @@
 FROM node@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
 
-RUN npm install --global npm@12.0.2 && npm install --global pnpm@11.24.0
-RUN apk add --upgrade --no-cache libcrypto3=3.5.8-r0 libssl3=3.5.8-r0
+RUN apk add --upgrade --no-cache libcrypto3=3.5.8-r0 libssl3=3.5.8-r0 \
+    && mkdir -p /opt/pnpm \
+    && wget -qO /tmp/pnpm.tar.gz https://github.com/pnpm/pnpm/releases/download/v11.24.0/pnpm-linux-x64-musl.tar.gz \
+    && echo "2fce00e10729d0c1f3836d499b908697fd3cd0832332651fbcee79c0a7442dcb  /tmp/pnpm.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/pnpm.tar.gz -C /opt/pnpm \
+    && rm /tmp/pnpm.tar.gz \
+    && ln -s /opt/pnpm/pnpm /usr/local/bin/pnpm \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 WORKDIR /workspace
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json tsconfig.base.json ./
 COPY apps/web/package.json apps/web/package.json

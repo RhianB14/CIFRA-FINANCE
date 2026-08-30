@@ -1,9 +1,3 @@
-# Excecoes escopadas ao scan da imagem MinIO (security.yml, job minio-scan).
-# Justificativa: MinIO RELEASE.2025-09-07T16-13-09Z e a release mais recente publicada no Docker Hub;
-# os findings residem em libs internas (grpc-go, Go stdlib, thrift, prometheus, libacl e OIDC do proprio MinIO)
-# e dependem de rebuild do fornecedor. Nao ha imagem corrigida disponivel (verificado em 2026-08-30).
-# Risco registrado no roadmap F0.5. Storage NAO foi substituido sem decisao arquitetural.
-# Novos CVEs continuam bloqueando o job. Expiram em 2026-12-31 (exp: e aplicado pelo trivy).
 CVE-2026-33322 exp:2026-12-31
 CVE-2026-33186 exp:2026-12-31
 CVE-2025-68121 exp:2026-12-31

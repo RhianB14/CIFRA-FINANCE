@@ -53,7 +53,7 @@ pnpm build
 
 `pnpm test:coverage` executa a cobertura da API com branch coverage, mínimo total de 70% e mínimo de 85% em `apps/api/app/services/`.
 
-`pnpm ci` executa os gates locais equivalentes à CI publicada. As auditorias de dependências e os scanners reproduzíveis são executados separadamente por `pnpm security:dependencies`, `pnpm security:gitleaks` e `pnpm security:trivy`.
+`pnpm verify` executa o gate unificado obrigatorio: lint, format checks, zero comentarios com seus testes, mypy strict, typecheck, testes, coverage, build web, scan gitleaks nao vazio dos arquivos rastreados, scan gitleaks do historico Git alcancavel e Expo Doctor. Qualquer falha interrompe o comando imediatamente e os scans falham se examinarem zero arquivos, zero commits ou zero bytes. As auditorias de dependencias e os scanners pesados sao executados separadamente por `pnpm run security:dependencies` e `pnpm run security:trivy`.
 
 `uvx pre-commit==4.6.2 install` instala os hooks de commit e `uvx pre-commit==4.6.2 install --hook-type commit-msg` instala o commitlint.
 

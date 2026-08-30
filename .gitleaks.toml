@@ -4,13 +4,8 @@ title = "Cifra gitleaks configuration"
 useDefault = true
 
 [allowlist]
-description = "Fictitious local development values"
+description = "Fictitious local development marker only"
 regexTarget = "match"
 regexes = [
   '''cifra_local_development'''
-]
-paths = [
-  '''\.env\.example$''',
-  '''docker-compose\.yml$''',
-  '''apps/api/app/core/settings\.py$'''
 ]

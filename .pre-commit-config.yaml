@@ -5,6 +5,7 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+      - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=1024]
   - repo: local
@@ -34,14 +35,19 @@ repos:
         entry: pnpm format:check
         language: system
         pass_filenames: false
+      - id: gitleaks-staged
+        name: gitleaks staged secrets
+        entry: pnpm run security:secrets:stage
+        language: system
+        pass_filenames: false
       - id: secretlint
-        name: secretlint
-        entry: pnpm security:secrets
+        name: secretlint complement
+        entry: pnpm exec secretlint "**/*"
         language: system
         pass_filenames: false
       - id: zero-comments
         name: Zero comments and docstrings
-        entry: python scripts/check_comments.py
+        entry: pnpm zero-comments
         language: system
         pass_filenames: false
       - id: commitlint
