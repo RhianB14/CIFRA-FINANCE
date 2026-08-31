@@ -153,7 +153,7 @@ async def test_reuse_invalidates_old_access_and_new_login_works(
     old_me = await client.get("/auth/me", headers={"Authorization": f"Bearer {old_access}"})
     assert old_me.status_code == 401
 
-    login = await client.post("/auth/login", json={"email": email, "password": PASSWORD})
+    login = await client.post("/auth/login", data={"username": email, "password": PASSWORD})
     assert login.status_code == 200
     access = str(login.json()["access_token"])
     payload = decode_access_token(access)
@@ -172,7 +172,7 @@ async def test_refresh_after_reuse_emits_access_with_current_version(
     await client.post("/auth/refresh", json={"refresh_token": refresh})
     reuse = await client.post("/auth/refresh", json={"refresh_token": refresh})
     assert reuse.status_code == 401
-    login = await client.post("/auth/login", json={"email": email, "password": PASSWORD})
+    login = await client.post("/auth/login", data={"username": email, "password": PASSWORD})
     new_refresh = str(login.json()["refresh_token"])
     rotated = await client.post("/auth/refresh", json={"refresh_token": new_refresh})
     assert rotated.status_code == 200
@@ -195,7 +195,7 @@ async def test_redis_flush_does_not_resurrect_revoked_sessions(
     await redis_client.flushdb()
     old_me = await client.get("/auth/me", headers={"Authorization": f"Bearer {old_access}"})
     assert old_me.status_code == 401
-    login = await client.post("/auth/login", json={"email": email, "password": PASSWORD})
+    login = await client.post("/auth/login", data={"username": email, "password": PASSWORD})
     payload = decode_access_token(str(login.json()["access_token"]))
     assert payload["sv"] == 2
 

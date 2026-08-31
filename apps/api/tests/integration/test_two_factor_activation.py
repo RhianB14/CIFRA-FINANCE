@@ -89,7 +89,7 @@ async def test_enrollment_code_cannot_authenticate_same_step(
 ) -> None:
     email, original = await register(client)
     code, _ = await activate(client, str(original["access_token"]))
-    login = await client.post("/auth/login", json={"email": email, "password": PASSWORD})
+    login = await client.post("/auth/login", data={"username": email, "password": PASSWORD})
     assert login.status_code == 200
     challenge = str(login.json()["challenge_id"])
     replay = await client.post(

@@ -2,7 +2,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import bind_current_user, get_session
@@ -18,7 +18,6 @@ from app.schemas.auth import (
     ChallengeRequest,
     ConfirmTwoFactorRequest,
     DisableTwoFactorRequest,
-    LoginRequest,
     MeResponse,
     RefreshRequest,
     RegisterRequest,
@@ -55,21 +54,25 @@ from app.services.two_factor import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-bearer = HTTPBearer(auto_error=False)
+oauth2 = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 
 def _credentials_error(detail: str) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+    signed: Annotated[str | None, Depends(oauth2)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> User:
-    if credentials is None:
+    if signed is None:
         raise _credentials_error("missing bearer token")
     try:
-        payload = decode_access_token(credentials.credentials)
+        payload = decode_access_token(signed)
     except TokenValidationError:
         raise _credentials_error("invalid access token") from None
     user_id = uuid.UUID(str(payload["sub"]))
@@ -117,11 +120,11 @@ async def register(
 
 @router.post("/login")
 async def login(
-    request: LoginRequest,
+    form: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenPair | dict[str, object]:
     try:
-        user = await authenticate_user(session, request.email, request.password)
+        user = await authenticate_user(session, form.username, form.password)
     except AuthenticationError:
         raise _credentials_error("invalid credentials") from None
     if user.totp_enabled:

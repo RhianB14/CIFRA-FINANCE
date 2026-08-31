@@ -110,7 +110,7 @@ async def test_register_rejects_weak_password_normalized(client: httpx.AsyncClie
 
 async def test_login_returns_tokens(client: httpx.AsyncClient) -> None:
     await register(client, EMAIL_A, PASSWORD)
-    response = await client.post("/auth/login", json={"email": EMAIL_A, "password": PASSWORD})
+    response = await client.post("/auth/login", data={"username": EMAIL_A, "password": PASSWORD})
     assert response.status_code == 200
     body = response.json()
     assert body["access_token"]
@@ -120,14 +120,14 @@ async def test_login_returns_tokens(client: httpx.AsyncClient) -> None:
 async def test_login_wrong_password_401(client: httpx.AsyncClient) -> None:
     await register(client, EMAIL_A, PASSWORD)
     response = await client.post(
-        "/auth/login", json={"email": EMAIL_A, "password": "WrongPassword-123"}
+        "/auth/login", data={"username": EMAIL_A, "password": "WrongPassword-123"}
     )
     assert response.status_code == 401
 
 
 async def test_login_unknown_user_401(client: httpx.AsyncClient) -> None:
     response = await client.post(
-        "/auth/login", json={"email": "ghost@example.com", "password": PASSWORD}
+        "/auth/login", data={"username": "ghost@example.com", "password": PASSWORD}
     )
     assert response.status_code == 401
 
@@ -202,7 +202,7 @@ async def test_two_factor_flow_requires_challenge(client: httpx.AsyncClient) -> 
     verify = await client.post("/auth/2fa/verify", headers=headers, json={"code": code})
     assert verify.status_code == 200
     assert len(verify.json()["backup_codes"]) == 10
-    login = await client.post("/auth/login", json={"email": EMAIL_A, "password": PASSWORD})
+    login = await client.post("/auth/login", data={"username": EMAIL_A, "password": PASSWORD})
     assert login.status_code == 200
     challenge_body = login.json()
     assert challenge_body.get("two_factor_required") is True
@@ -212,7 +212,9 @@ async def test_two_factor_flow_requires_challenge(client: httpx.AsyncClient) -> 
         json={"challenge_id": challenge_body["challenge_id"], "code": "000000"},
     )
     assert password_only.status_code == 401
-    second_login = await client.post("/auth/login", json={"email": EMAIL_A, "password": PASSWORD})
+    second_login = await client.post(
+        "/auth/login", data={"username": EMAIL_A, "password": PASSWORD}
+    )
     challenge_id = second_login.json()["challenge_id"]
     good_code = verify.json()["backup_codes"][0]
     challenge = await client.post(
@@ -231,7 +233,7 @@ async def test_two_factor_challenge_reuses_challenge_id_is_single_use(
     seed = setup.json()["otpauth_uri"].split("secret=")[1].split("&")[0]
     code = pyotp.TOTP(seed).at(int(time.time()))
     verify = await client.post("/auth/2fa/verify", headers=headers, json={"code": code})
-    login = await client.post("/auth/login", json={"email": EMAIL_A, "password": PASSWORD})
+    login = await client.post("/auth/login", data={"username": EMAIL_A, "password": PASSWORD})
     challenge_id = login.json()["challenge_id"]
     good_code = verify.json()["backup_codes"][0]
     first = await client.post(
@@ -252,13 +254,13 @@ async def test_backup_code_completes_challenge_once(client: httpx.AsyncClient) -
     code = pyotp.TOTP(seed).at(int(time.time()))
     verify = await client.post("/auth/2fa/verify", headers=headers, json={"code": code})
     backup = verify.json()["backup_codes"][0]
-    login = await client.post("/auth/login", json={"email": EMAIL_A, "password": PASSWORD})
+    login = await client.post("/auth/login", data={"username": EMAIL_A, "password": PASSWORD})
     challenge_id = login.json()["challenge_id"]
     first = await client.post(
         "/auth/2fa/challenge", json={"challenge_id": challenge_id, "code": backup}
     )
     assert first.status_code == 200
-    again_login = await client.post("/auth/login", json={"email": EMAIL_A, "password": PASSWORD})
+    again_login = await client.post("/auth/login", data={"username": EMAIL_A, "password": PASSWORD})
     second_challenge = await client.post(
         "/auth/2fa/challenge",
         json={"challenge_id": again_login.json()["challenge_id"], "code": backup},
@@ -281,7 +283,7 @@ async def test_two_factor_disable_with_totp(client: httpx.AsyncClient) -> None:
         json={"password": PASSWORD, "code": disable_code},
     )
     assert disable.status_code == 200
-    login = await client.post("/auth/login", json={"email": EMAIL_A, "password": PASSWORD})
+    login = await client.post("/auth/login", data={"username": EMAIL_A, "password": PASSWORD})
     assert login.json().get("access_token")
 
 
