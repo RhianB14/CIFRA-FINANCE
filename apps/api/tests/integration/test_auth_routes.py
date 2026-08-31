@@ -214,7 +214,7 @@ async def test_two_factor_flow_requires_challenge(client: httpx.AsyncClient) -> 
     assert password_only.status_code == 401
     second_login = await client.post("/auth/login", json={"email": EMAIL_A, "password": PASSWORD})
     challenge_id = second_login.json()["challenge_id"]
-    good_code = pyotp.TOTP(seed).at(int(time.time()))
+    good_code = verify.json()["backup_codes"][0]
     challenge = await client.post(
         "/auth/2fa/challenge", json={"challenge_id": challenge_id, "code": good_code}
     )
@@ -230,10 +230,10 @@ async def test_two_factor_challenge_reuses_challenge_id_is_single_use(
     setup = await client.post("/auth/2fa/setup", headers=headers)
     seed = setup.json()["otpauth_uri"].split("secret=")[1].split("&")[0]
     code = pyotp.TOTP(seed).at(int(time.time()))
-    await client.post("/auth/2fa/verify", headers=headers, json={"code": code})
+    verify = await client.post("/auth/2fa/verify", headers=headers, json={"code": code})
     login = await client.post("/auth/login", json={"email": EMAIL_A, "password": PASSWORD})
     challenge_id = login.json()["challenge_id"]
-    good_code = pyotp.TOTP(seed).at(int(time.time()))
+    good_code = verify.json()["backup_codes"][0]
     first = await client.post(
         "/auth/2fa/challenge", json={"challenge_id": challenge_id, "code": good_code}
     )
@@ -272,9 +272,14 @@ async def test_two_factor_disable_with_totp(client: httpx.AsyncClient) -> None:
     setup = await client.post("/auth/2fa/setup", headers=headers)
     seed = setup.json()["otpauth_uri"].split("secret=")[1].split("&")[0]
     code = pyotp.TOTP(seed).at(int(time.time()))
-    await client.post("/auth/2fa/verify", headers=headers, json={"code": code})
-    disable_code = pyotp.TOTP(seed).at(int(time.time()))
-    disable = await client.post("/auth/2fa/disable", headers=headers, json={"code": disable_code})
+    verify = await client.post("/auth/2fa/verify", headers=headers, json={"code": code})
+    new_headers = {"Authorization": f"Bearer {verify.json()['access_token']}"}
+    disable_code = verify.json()["backup_codes"][0]
+    disable = await client.post(
+        "/auth/2fa/disable",
+        headers=new_headers,
+        json={"password": PASSWORD, "code": disable_code},
+    )
     assert disable.status_code == 200
     login = await client.post("/auth/login", json={"email": EMAIL_A, "password": PASSWORD})
     assert login.json().get("access_token")
@@ -286,8 +291,10 @@ async def test_two_factor_setup_conflict_after_enable(client: httpx.AsyncClient)
     setup = await client.post("/auth/2fa/setup", headers=headers)
     seed = setup.json()["otpauth_uri"].split("secret=")[1].split("&")[0]
     code = pyotp.TOTP(seed).at(int(time.time()))
-    await client.post("/auth/2fa/verify", headers=headers, json={"code": code})
-    conflict = await client.post("/auth/2fa/setup", headers=headers)
+    verify = await client.post("/auth/2fa/verify", headers=headers, json={"code": code})
+    assert verify.status_code == 200
+    new_headers = {"Authorization": f"Bearer {verify.json()['access_token']}"}
+    conflict = await client.post("/auth/2fa/setup", headers=new_headers)
     assert conflict.status_code == 409
 
 
@@ -301,5 +308,9 @@ async def test_two_factor_verify_without_setup_400(client: httpx.AsyncClient) ->
 async def test_two_factor_disable_without_enable_409(client: httpx.AsyncClient) -> None:
     body = (await register(client, EMAIL_A, PASSWORD)).json()
     headers = {"Authorization": f"Bearer {body['access_token']}"}
-    response = await client.post("/auth/2fa/disable", headers=headers, json={"code": "123456"})
+    response = await client.post(
+        "/auth/2fa/disable",
+        headers=headers,
+        json={"password": PASSWORD, "code": "123456"},
+    )
     assert response.status_code == 409

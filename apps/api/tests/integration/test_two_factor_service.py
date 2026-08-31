@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_secret
+from app.core.passwords import hash_password
 from app.models import BackupCode, User
 from app.services.two_factor import (
     TwoFactorAlreadyEnabledError,
@@ -23,7 +24,7 @@ async def make_user(session: AsyncSession) -> User:
     user = User(
         email=f"{uuid4().hex}@example.com",
         name="Ana",
-        password_hash="x" * 20,
+        password_hash=hash_password("Tr0ub4dor&3-Correct-Horse"),
     )
     session.add(user)
     await session.commit()
@@ -163,7 +164,7 @@ async def test_disable_with_totp_code_wipes_state(db_session: AsyncSession) -> N
     user.totp_last_step = None
     await db_session.commit()
     code = pyotp.TOTP(decrypt_secret(assert_value(user.totp_secret_encrypted))).at(int(time.time()))
-    await disable_totp(db_session, user, code)
+    await disable_totp(db_session, user, "Tr0ub4dor&3-Correct-Horse", code)
     assert user.totp_enabled is False
     assert user.totp_secret_encrypted is None
     assert user.totp_pending_secret_encrypted is None
@@ -176,7 +177,7 @@ async def test_disable_with_totp_code_wipes_state(db_session: AsyncSession) -> N
 async def test_disable_with_backup_code_wipes_state(db_session: AsyncSession) -> None:
     user = await make_user(db_session)
     codes = await enroll(db_session, user)
-    await disable_totp(db_session, user, codes[1])
+    await disable_totp(db_session, user, "Tr0ub4dor&3-Correct-Horse", codes[1])
     assert user.totp_enabled is False
 
 
@@ -185,7 +186,7 @@ async def test_disable_with_wrong_code_keeps_enabled(db_session: AsyncSession) -
     user = await make_user(db_session)
     await enroll(db_session, user)
     with pytest.raises(TwoFactorError):
-        await disable_totp(db_session, user, "000000")
+        await disable_totp(db_session, user, "Tr0ub4dor&3-Correct-Horse", "000000")
     assert user.totp_enabled is True
 
 

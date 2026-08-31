@@ -98,11 +98,12 @@ async def test_disable_rolls_back_every_change_when_commit_fails(
     db_session: AsyncSession,
 ) -> None:
     user, codes = await enabled_user(db_session)
+    user_id = user.id
     await disable_totp(db_session, user, PASSWORD, codes[0])
     await db_session.rollback()
-    current = await db_session.get(User, user.id)
+    current = await db_session.get(User, user_id)
     assert current is not None
     assert current.totp_enabled is True
     assert current.session_version == 2
-    result = await db_session.execute(select(BackupCode).where(BackupCode.user_id == user.id))
+    result = await db_session.execute(select(BackupCode).where(BackupCode.user_id == user_id))
     assert len(list(result.scalars())) == 10

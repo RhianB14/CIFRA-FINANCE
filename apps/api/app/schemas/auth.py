@@ -49,6 +49,7 @@ class ConfirmTwoFactorRequest(BaseModel):
 
 
 class DisableTwoFactorRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=128)
     code: str = Field(min_length=1, max_length=16)
 
 

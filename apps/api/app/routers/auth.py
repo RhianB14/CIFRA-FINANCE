@@ -261,7 +261,8 @@ async def disable_two_factor(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, str]:
     try:
-        await disable_totp(session, user, request.code)
+        await disable_totp(session, user, request.password, request.code)
+        await session.commit()
     except TwoFactorNotEnabledError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="two factor is not enabled"
