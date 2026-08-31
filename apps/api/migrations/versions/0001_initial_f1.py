@@ -54,6 +54,11 @@ def upgrade() -> None:
             name=op.f("fk_refresh_tokens_user_id_users"),
             ondelete="CASCADE",
         ),
+        sa.ForeignKeyConstraint(
+            ["replaced_by"],
+            ["refresh_tokens.id"],
+            name=op.f("fk_refresh_tokens_replaced_by_refresh_tokens"),
+        ),
     )
     op.create_table(
         "backup_codes",

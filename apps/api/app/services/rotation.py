@@ -61,8 +61,7 @@ async def issue_refresh_token(
         or datetime.now(UTC) + timedelta(days=get_settings().refresh_token_ttl_days),
     )
     session.add(row)
-    await session.commit()
-    await session.refresh(row)
+    await session.flush()
     return signed, row
 
 
@@ -92,7 +91,6 @@ async def _revoke_all_user_tokens(session: AsyncSession, user_id: uuid.UUID) -> 
     )
     for row in result.scalars():
         row.revoked_at = datetime.now(UTC)
-    await session.commit()
 
 
 async def rotate_refresh_token(
@@ -110,6 +108,7 @@ async def rotate_refresh_token(
         _ensure_rotatable(row)
     except ReuseDetectedError:
         await _revoke_all_user_tokens(session, user_id)
+        await session.commit()
         await bump_global_version(user_id, client=redis_client)
         raise
     family_id = row.family_id

@@ -71,7 +71,9 @@ class RefreshToken(Base):
     )
     expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
-    replaced_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    replaced_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("refresh_tokens.id"), nullable=True
+    )
 
     __table_args__ = (UniqueConstraint("jti_hash", name="uq_refresh_tokens_jti_hash"),)
 

@@ -31,12 +31,12 @@ from app.services.auth import (
     EmailAlreadyRegisteredError,
     authenticate_user,
     register_user,
+    start_session,
 )
 from app.services.rotation import (
     ReuseDetectedError,
     TokenExpiredError,
     TokenNotFoundError,
-    issue_refresh_token,
     revoke_session,
     rotate_refresh_token,
 )
@@ -113,8 +113,7 @@ async def login(
     if user.totp_enabled:
         challenge_id = await _create_challenge(session, user)
         return {"challenge_id": challenge_id, "two_factor_required": True}
-    access = create_access_token(user.id)
-    refresh, _ = await issue_refresh_token(session, user.id)
+    access, refresh = await start_session(session, user)
     return TokenPair(access_token=access, refresh_token=refresh)
 
 
@@ -161,8 +160,7 @@ async def two_factor_challenge(
         await verify_second_factor(session, user, request.code)
     except TwoFactorError:
         raise _credentials_error("invalid second factor code") from None
-    access = create_access_token(user.id)
-    refresh, _ = await issue_refresh_token(session, user.id)
+    access, refresh = await start_session(session, user)
     return TokenPair(access_token=access, refresh_token=refresh)
 
 
@@ -231,8 +229,7 @@ async def verify_two_factor(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="invalid confirmation code"
         ) from None
-    access = create_access_token(user.id)
-    refresh, _ = await issue_refresh_token(session, user.id)
+    access, refresh = await start_session(session, user)
     return VerifyTwoFactorResponse(
         access_token=access,
         refresh_token=refresh,

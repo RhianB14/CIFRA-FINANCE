@@ -1,8 +1,9 @@
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.emails import normalize_email
-from app.core.passwords import hash_password, verify_password
+from app.core.passwords import hash_password, validate_password, verify_password
 from app.core.tokens import create_access_token
 from app.models import User
 from app.services.rotation import issue_refresh_token
@@ -27,8 +28,6 @@ async def register_user(
     password: str,
     name: str,
 ) -> tuple[User, str, str]:
-    from app.core.passwords import validate_password
-
     validate_password(password)
     normalized = normalize_email(email)
     if await get_user_by_email(session, normalized) is not None:
@@ -39,11 +38,22 @@ async def register_user(
         password_hash=hash_password(password),
     )
     session.add(user)
-    await session.commit()
-    await session.refresh(user)
+    await session.flush()
     access = create_access_token(user.id)
     refresh, _ = await issue_refresh_token(session, user.id)
+    try:
+        await session.commit()
+    except IntegrityError as error:
+        raise EmailAlreadyRegisteredError("email is already registered") from error
+    await session.refresh(user)
     return user, access, refresh
+
+
+async def start_session(session: AsyncSession, user: User) -> tuple[str, str]:
+    access = create_access_token(user.id)
+    refresh, _ = await issue_refresh_token(session, user.id)
+    await session.commit()
+    return access, refresh
 
 
 async def authenticate_user(

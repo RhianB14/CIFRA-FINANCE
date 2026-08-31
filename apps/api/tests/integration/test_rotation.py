@@ -113,6 +113,7 @@ async def test_normal_rotation_revokes_old_and_issues_new(
     async with session_factory() as session:
         user = await make_user(session)
         old_jwt, old_row = await issue_refresh_token(session, user.id)
+        await session.commit()
     async with session_factory() as session:
         new_jwt, new_row = await rotate_refresh_token(session, old_jwt, redis_client)
         assert new_jwt != old_jwt
@@ -202,6 +203,7 @@ async def test_concurrent_rotation_allows_single_winner(
     async with session_factory() as session:
         user = await make_user(session)
         jwt, _ = await issue_refresh_token(session, user.id)
+        await session.commit()
 
     async def attempt() -> str:
         async with session_factory() as session:
@@ -230,6 +232,7 @@ async def test_expired_refresh_rejected(
             user.id,
             expires_at=datetime.now(UTC) - timedelta(seconds=1),
         )
+        await session.commit()
     async with session_factory() as session:
         with pytest.raises(TokenExpiredError):
             await rotate_refresh_token(session, jwt, redis_client)
