@@ -107,6 +107,11 @@ jobs:
       - name: apply migrations
         run: uv run alembic upgrade head
         working-directory: apps/api
+      - name: verify migrations downgrade and re-upgrade
+        run: |
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+        working-directory: apps/api
       - run: pnpm --filter @cifra/api test:coverage
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:

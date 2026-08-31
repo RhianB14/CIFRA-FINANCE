@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import pytest_asyncio
 import redis.asyncio as redis
+from alembic import command
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -16,7 +17,7 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.settings import get_settings
 from app.core.tokens import create_refresh_token
-from app.models import Base, RefreshToken, User
+from app.models import RefreshToken, User
 from app.services.rotation import (
     ReuseDetectedError,
     TokenExpiredError,
@@ -26,6 +27,7 @@ from app.services.rotation import (
     rotate_refresh_token,
 )
 from app.services.session_revocation import SessionStoreUnavailableError, session_invalid
+from tests.conftest import alembic_config
 
 ROTATION_DB = "cifra_test_rotation"
 
@@ -48,9 +50,8 @@ async def rotation_engine() -> AsyncIterator[AsyncEngine]:
         await connection.execute(f'CREATE DATABASE "{ROTATION_DB}"')
     finally:
         await connection.close()
+    await asyncio.to_thread(command.upgrade, alembic_config(ROTATION_DB), "head")
     engine = create_async_engine(db_url(ROTATION_DB))
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
     yield engine
     await engine.dispose()
 

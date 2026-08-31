@@ -1,10 +1,11 @@
+import asyncio
 import time
 from collections.abc import AsyncIterator
 
 import httpx
 import pyotp
 import pytest_asyncio
-from sqlalchemy.engine import Connection
+from alembic import command
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.settings import get_settings
 from app.main import app
+from tests.conftest import alembic_config
 
 API_DB = "cifra_test_routes"
 
@@ -44,17 +46,10 @@ async def make_api_database() -> None:
 @pytest_asyncio.fixture()
 async def api_engine() -> AsyncIterator[AsyncEngine]:
     await make_api_database()
+    await asyncio.to_thread(command.upgrade, alembic_config(API_DB), "head")
     engine = create_async_engine(db_url(API_DB))
-    async with engine.begin() as conn:
-        await conn.run_sync(_create_all)
     yield engine
     await engine.dispose()
-
-
-def _create_all(sync_conn: Connection) -> None:
-    from app.models import Base
-
-    Base.metadata.create_all(sync_conn)
 
 
 @pytest_asyncio.fixture()
