@@ -26,6 +26,7 @@ supersession; decider-approved maintenance edits are allowed.
 | [0002](accepted/architecture/0002-currency-per-account.md) | architecture | Armazenar moeda ISO 4217 por conta e lançamento, mantendo BRL como única moeda operacional no MVP. | 🟢 | finance, currency, data-model |
 | [0003](accepted/architecture/0003-optimistic-locking.md) | architecture | Exigir uma versão esperada nas alterações e devolver 409 quando o registro tiver sido modificado. | 🟢 | concurrency, data-integrity, api |
 | [0004](accepted/security/0004-row-level-security.md) | security | Aplicar filtro de propriedade na aplicação e Row-Level Security no PostgreSQL para todas as tabelas do usuário. | 🟢 | security, multi-tenant, postgres, authorization |
+| [0005](accepted/security/0005-jwt-auth-totp.md) | security | Access token de curta vida, refresh rotativo com detecção de reutilização, Argon2id e segundo fator TOTP com backup codes. | 🟢 | security, auth, jwt, totp, argon2, redis |
 
 ## Layout
 Everything lives under `docs/decisions/`:

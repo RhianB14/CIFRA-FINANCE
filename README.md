@@ -1,6 +1,6 @@
 # Cifra
 
-Cifra é um controle financeiro pessoal com web em Next.js, aplicativo Android em Expo e API FastAPI. A F0 estabelece o monorepo, os serviços locais e os contratos mínimos de saúde, sem antecipar autenticação ou domínio financeiro.
+Cifra é um controle financeiro pessoal com web em Next.js, aplicativo Android em Expo e API FastAPI. A F0 estabelece o monorepo, os serviços locais e os contratos mínimos de saúde. A F1 adiciona autenticação multiusuário: JWT access/refresh com rotação e detecção de reutilização, Argon2id, 2FA por TOTP com backup codes e contexto de Row-Level Security.
 
 ## Pré-requisitos
 
@@ -66,7 +66,35 @@ cd apps/api
 uv run uvicorn app.main:app --reload
 uv run pytest -q
 uv run ruff check .
+pnpm --filter @cifra/api openapi:check
 ```
+
+## Autenticação
+
+Endpoints da F1, todos sob `/auth` (spec completa em `apps/api/docs/openapi.json` ou `/docs` na API):
+
+| Endpoint | Função |
+|---|---|
+| `POST /auth/register` | Cria usuário e retorna par de tokens |
+| `POST /auth/login` | Retorna par de tokens; com 2FA ativo retorna `challenge_id` (202) |
+| `POST /auth/2fa/challenge` | Troca `challenge_id` + código TOTP/backup por tokens |
+| `POST /auth/refresh` | Rotaciona o refresh token; reuso de token revogado revoga a família |
+| `POST /auth/logout` | Revoga a sessão apresentada |
+| `GET /auth/me` | Dados do usuário autenticado (Bearer) |
+| `POST /auth/2fa/setup` | Inicia enrollment TOTP (URI otpauth + QR) |
+| `POST /auth/2fa/verify` | Confirma o código e retorna backup codes de uso único |
+| `POST /auth/2fa/disable` | Desativa o 2FA (exige código válido) |
+
+Access token dura 15 minutos (HS256, claims `iss`, `aud`, `typ`, `jti`, `sub`, `sv`). Refresh dura 30 dias, é rotacionado a cada uso e só existe no banco como SHA-256. Reuso de refresh revogado revoga toda a família e bumpa a versão global de sessão no Redis. Senhas em Argon2id; HIBP é opt-in (`HIBP_ENABLED=true`). Segredos TOTP são criptografados com Fernet (`TOTP_ENCRYPTION_KEY`). Rate limiting e account lockout ficam para a F1.5.
+
+Para gerar as chaves locais:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+As duas variáveis são obrigatórias fora de ambiente de teste; a API recusa iniciar sem elas (`ENVIRONMENT` diferente de `test` exige chaves com entropia suficiente).
 
 ## Docker Compose
 
