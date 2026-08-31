@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.core.settings import ensure_secure_configuration, get_settings
+from app.routers.auth import router as auth_router
 from app.routers.health import router as health_router
 
 
@@ -15,3 +16,4 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Cifra API", version="0.2.0", lifespan=lifespan)
 app.include_router(health_router)
+app.include_router(auth_router)

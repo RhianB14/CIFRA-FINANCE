@@ -74,7 +74,7 @@ async def confirm_totp(session: AsyncSession, user: User, code: str) -> list[str
     user.totp_secret_encrypted = user.totp_pending_secret_encrypted
     user.totp_pending_secret_encrypted = None
     user.totp_enabled = True
-    user.totp_last_step = step
+    user.totp_last_step = None
     user.totp_confirmed_at = datetime.now(UTC)
     await session.commit()
     return codes

@@ -26,6 +26,10 @@ def qr_data_uri(uri: str) -> str:
     return segno.make(uri).png_data_uri(scale=6, border=2)
 
 
+def _now() -> float:
+    return time.time()
+
+
 def verify_totp(
     secret: str,
     code: str,
@@ -36,7 +40,7 @@ def verify_totp(
     if not normalized.isdigit() or len(normalized) != 6:
         return False, None
     totp = pyotp.TOTP(secret)
-    current_step = int((now if now is not None else time.time()) // TOTP_PERIOD)
+    current_step = int((now if now is not None else _now()) // TOTP_PERIOD)
     for offset in range(TOTP_DRIFT_WINDOWS, -1, -1):
         candidate_step = current_step - offset
         candidate = totp.at(candidate_step * TOTP_PERIOD)
