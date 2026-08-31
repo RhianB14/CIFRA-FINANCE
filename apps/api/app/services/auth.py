@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.emails import normalize_email
 from app.core.hibp import HIBPClient, HIBPTransport, http_hibp_transport
 from app.core.passwords import (
+    dummy_password_hash,
     hash_password,
     needs_rehash,
     validate_password,
@@ -57,12 +58,13 @@ async def register_user(
         password_hash=hash_password(password),
     )
     session.add(user)
-    await session.flush()
-    access = create_access_token(user.id, session_version=user.session_version)
-    refresh, _ = await issue_refresh_token(session, user.id)
     try:
+        await session.flush()
+        access = create_access_token(user.id, session_version=user.session_version)
+        refresh, _ = await issue_refresh_token(session, user.id)
         await session.commit()
     except IntegrityError as error:
+        await session.rollback()
         raise EmailAlreadyRegisteredError("email is already registered") from error
     await session.refresh(user)
     return user, access, refresh
@@ -81,7 +83,9 @@ async def authenticate_user(
     password: str,
 ) -> User:
     user = await get_user_by_email(session, email)
-    if user is None or not verify_password(user.password_hash, password):
+    password_hash = user.password_hash if user is not None else dummy_password_hash()
+    valid = verify_password(password_hash, password)
+    if user is None or not valid:
         raise AuthenticationError("invalid credentials")
     if needs_rehash(user.password_hash):
         user.password_hash = hash_password(password)

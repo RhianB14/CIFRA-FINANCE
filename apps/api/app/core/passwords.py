@@ -4,6 +4,7 @@ from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatc
 from app.core.settings import get_settings
 
 _hasher: PasswordHasher | None = None
+_dummy_hash: str | None = None
 
 
 def get_hasher() -> PasswordHasher:
@@ -21,8 +22,16 @@ def get_hasher() -> PasswordHasher:
 
 
 def reset_hasher() -> None:
-    global _hasher
+    global _hasher, _dummy_hash
     _hasher = None
+    _dummy_hash = None
+
+
+def dummy_password_hash() -> str:
+    global _dummy_hash
+    if _dummy_hash is None:
+        _dummy_hash = get_hasher().hash("cifra-internal-dummy-verification-value")
+    return _dummy_hash
 
 
 class PasswordPolicyError(ValueError):
