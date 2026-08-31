@@ -4,7 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.emails import normalize_email
 from app.core.hibp import HIBPClient, HIBPTransport, http_hibp_transport
-from app.core.passwords import hash_password, validate_password, verify_password
+from app.core.passwords import (
+    hash_password,
+    needs_rehash,
+    validate_password,
+    verify_password,
+)
 from app.core.settings import get_settings
 from app.core.tokens import create_access_token
 from app.models import User
@@ -78,4 +83,7 @@ async def authenticate_user(
     user = await get_user_by_email(session, email)
     if user is None or not verify_password(user.password_hash, password):
         raise AuthenticationError("invalid credentials")
+    if needs_rehash(user.password_hash):
+        user.password_hash = hash_password(password)
+        await session.commit()
     return user
