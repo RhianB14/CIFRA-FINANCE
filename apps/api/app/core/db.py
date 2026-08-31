@@ -1,5 +1,7 @@
+import uuid
 from collections.abc import AsyncIterator
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -30,6 +32,13 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 async def get_session() -> AsyncIterator[AsyncSession]:
     async with get_session_factory()() as session:
         yield session
+
+
+async def bind_current_user(session: AsyncSession, user_id: uuid.UUID) -> None:
+    await session.execute(
+        text("SELECT set_config('app.current_user_id', :value, true)"),
+        {"value": str(user_id)},
+    )
 
 
 async def dispose_engine() -> None:

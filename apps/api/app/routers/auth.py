@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db import get_session
+from app.core.db import bind_current_user, get_session
 from app.core.settings import get_settings
 from app.core.tokens import (
     TokenValidationError,
@@ -77,6 +77,7 @@ async def get_current_user(
     user = await session.get(User, user_id)
     if user is None:
         raise _credentials_error("unknown user")
+    await bind_current_user(session, user_id)
     return user
 
 
