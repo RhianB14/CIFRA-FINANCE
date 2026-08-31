@@ -80,7 +80,7 @@ jobs:
           --health-timeout 3s
           --health-retries 12
     env:
-      DATABASE_URL: postgresql://cifra:cifra_local_development@localhost:5432/cifra
+      DATABASE_URL: postgresql+asyncpg://cifra:cifra_local_development@localhost:5432/cifra
       REDIS_URL: redis://localhost:6379/15
       ENVIRONMENT: test
     steps:

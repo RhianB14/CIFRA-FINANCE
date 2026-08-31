@@ -160,7 +160,10 @@ async def test_user_b_cannot_use_token_of_a(client: httpx.AsyncClient) -> None:
     response = await client.get("/auth/me", headers={"Authorization": f"Bearer {token_a}"})
     assert response.status_code == 200
     assert response.json()["email"] == EMAIL_A
-    tampered = token_a[:-1] + ("A" if token_a[-1] != "A" else "B")
+    chars = list(token_a)
+    chars[-1] = "A" if chars[-1] != "A" else "B"
+    chars[-2] = "A" if chars[-2] != "A" else "B"
+    tampered = "".join(chars)
     response = await client.get("/auth/me", headers={"Authorization": f"Bearer {tampered}"})
     assert response.status_code == 401
 

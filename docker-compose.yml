@@ -50,9 +50,12 @@ services:
     build:
       context: ./apps/api
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://cifra:cifra_local_development@postgres:5432/cifra}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://cifra:cifra_local_development@postgres:5432/cifra}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      ENVIRONMENT: development
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-dev-only-signing-key-change-me-0123456789abcdef}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-dev-only-totp-key-QvE2GX2-_Y0WATSvZTyabQQfSt1ndxQDnSn37fbUIvg=}
     ports:
       - "${API_PORT:-18000}:8000"
     volumes:
