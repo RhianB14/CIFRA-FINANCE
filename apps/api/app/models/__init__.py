@@ -30,6 +30,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    session_version: Mapped[int] = mapped_column(default=1, server_default="1", nullable=False)
     totp_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
     totp_secret_encrypted: Mapped[str | None] = mapped_column(String(512), nullable=True)
     totp_pending_secret_encrypted: Mapped[str | None] = mapped_column(String(512), nullable=True)

@@ -25,12 +25,7 @@ from app.services.rotation import (
     revoke_session,
     rotate_refresh_token,
 )
-from app.services.session_revocation import (
-    SessionStoreUnavailableError,
-    bump_global_version,
-    get_global_version,
-    session_invalid,
-)
+from app.services.session_revocation import SessionStoreUnavailableError, session_invalid
 
 ROTATION_DB = "cifra_test_rotation"
 
@@ -168,12 +163,15 @@ async def test_reuse_bumps_global_version_invalidating_access_tokens(
         user = await make_user(session)
         jwt, _ = await issue_refresh_token(session, user.id)
         await rotate_refresh_token(session, jwt, redis_client)
-    assert await get_global_version(user.id) == 1
+        assert user.session_version == 1
     async with session_factory() as session:
         with pytest.raises(ReuseDetectedError):
             await rotate_refresh_token(session, jwt, redis_client)
-    assert await get_global_version(user.id) == 2
-    assert await session_invalid(user.id, 1) is True
+    async with session_factory() as session:
+        updated = await session.get(User, user.id)
+        assert updated is not None
+        assert updated.session_version == 2
+        assert await session_invalid(session, user.id, 1) is True
 
 
 @pytest.mark.asyncio
@@ -191,8 +189,11 @@ async def test_reuse_isolated_per_user(
     async with session_factory() as session:
         with pytest.raises(ReuseDetectedError):
             await rotate_refresh_token(session, attacker_jwt, redis_client)
-    assert await get_global_version(victim.id) == 1
-    assert await session_invalid(victim.id, 1) is False
+    async with session_factory() as session:
+        victim_row = await session.get(User, victim.id)
+        assert victim_row is not None
+        assert victim_row.session_version == 1
+        assert await session_invalid(session, victim.id, 1) is False
 
 
 @pytest.mark.asyncio
@@ -265,7 +266,10 @@ async def test_logout_is_idempotent(
         tokens = await list_tokens(session, user.id)
         assert len(tokens) == 1
         assert tokens[0].revoked_at is not None
-    assert await get_global_version(user.id) == 1
+    async with session_factory() as session:
+        current = await session.get(User, user.id)
+        assert current is not None
+        assert current.session_version == 1
 
 
 @pytest.mark.asyncio
@@ -282,21 +286,12 @@ async def test_unknown_refresh_token_rejected(
 
 
 @pytest.mark.asyncio
-async def test_session_version_defaults_and_bump(redis_client: redis.Redis) -> None:
-    user_id = uuid.uuid4()
-    assert await get_global_version(user_id) == 1
-    assert await session_invalid(user_id, 1) is False
-    await bump_global_version(user_id)
-    assert await get_global_version(user_id) == 2
-    assert await session_invalid(user_id, 1) is True
-    assert await session_invalid(user_id, 2) is False
-
-
-@pytest.mark.asyncio
-async def test_redis_unavailable_fails_closed() -> None:
-    user_id = uuid.uuid4()
-    broken = redis.Redis(host="localhost", port=1, decode_responses=True)
-    with pytest.raises(SessionStoreUnavailableError):
-        await get_global_version(user_id, client=broken)
-    with pytest.raises(SessionStoreUnavailableError):
-        await session_invalid(user_id, 1, client=broken)
+async def test_redis_unavailable_fails_closed(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        user = await make_user(session)
+        broken = redis.Redis(host="localhost", port=1, decode_responses=True)
+        with pytest.raises(SessionStoreUnavailableError):
+            await session_invalid(session, user.id, 1, client=broken)
+        await broken.aclose()

@@ -40,7 +40,10 @@ from app.services.rotation import (
     revoke_session,
     rotate_refresh_token,
 )
-from app.services.session_revocation import session_invalid
+from app.services.session_revocation import (
+    SessionStoreUnavailableError,
+    session_invalid,
+)
 from app.services.two_factor import (
     TwoFactorAlreadyEnabledError,
     TwoFactorError,
@@ -72,8 +75,14 @@ async def get_current_user(
     user_id = uuid.UUID(str(payload["sub"]))
     raw_version = payload.get("sv", 1)
     session_version = int(raw_version) if isinstance(raw_version, int) else 1
-    if await session_invalid(user_id, session_version):
-        raise _credentials_error("session has been revoked")
+    try:
+        if await session_invalid(session, user_id, session_version):
+            raise _credentials_error("session has been revoked")
+    except SessionStoreUnavailableError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="session dependency unavailable",
+        ) from None
     user = await session.get(User, user_id)
     if user is None:
         raise _credentials_error("unknown user")
@@ -171,10 +180,18 @@ async def refresh(
 ) -> TokenPair:
     try:
         new_refresh_jwt, _ = await rotate_refresh_token(session, request.refresh_token)
+    except SessionStoreUnavailableError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="session dependency unavailable",
+        ) from None
     except (ReuseDetectedError, TokenNotFoundError, TokenExpiredError, TokenValidationError):
         raise _credentials_error("refresh token is invalid, expired or reused") from None
     payload = decode_refresh_token(new_refresh_jwt)
-    access = create_access_token(uuid.UUID(str(payload["sub"])))
+    user = await session.get(User, uuid.UUID(str(payload["sub"])))
+    if user is None:
+        raise _credentials_error("refresh token is invalid, expired or reused")
+    access = create_access_token(user.id, session_version=user.session_version)
     return TokenPair(access_token=access, refresh_token=new_refresh_jwt)
 
 

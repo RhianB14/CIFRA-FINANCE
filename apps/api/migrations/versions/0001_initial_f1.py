@@ -22,6 +22,7 @@ def upgrade() -> None:
         sa.Column("email", sa.String(length=320), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("password_hash", sa.String(length=255), nullable=False),
+        sa.Column("session_version", sa.Integer(), nullable=False, server_default=sa.text("1")),
         sa.Column("totp_enabled", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("totp_secret_encrypted", sa.String(length=512), nullable=True),
         sa.Column("totp_pending_secret_encrypted", sa.String(length=512), nullable=True),

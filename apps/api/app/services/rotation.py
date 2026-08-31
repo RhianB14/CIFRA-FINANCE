@@ -10,7 +10,8 @@ from app.core.settings import get_settings
 from app.core.tokens import create_refresh_token, decode_refresh_token
 from app.models import RefreshToken
 from app.services.session_revocation import (
-    bump_global_version,
+    bump_session_version,
+    publish_session_version,
 )
 
 RedisLike = redis.Redis
@@ -108,8 +109,9 @@ async def rotate_refresh_token(
         _ensure_rotatable(row)
     except ReuseDetectedError:
         await _revoke_all_user_tokens(session, user_id)
+        session_version = await bump_session_version(session, user_id)
         await session.commit()
-        await bump_global_version(user_id, client=redis_client)
+        await publish_session_version(user_id, session_version, client=redis_client)
         raise
     family_id = row.family_id
     new_jwt, new_row = await issue_refresh_token(

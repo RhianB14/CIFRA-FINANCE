@@ -39,7 +39,7 @@ async def register_user(
     )
     session.add(user)
     await session.flush()
-    access = create_access_token(user.id)
+    access = create_access_token(user.id, session_version=user.session_version)
     refresh, _ = await issue_refresh_token(session, user.id)
     try:
         await session.commit()
@@ -50,7 +50,7 @@ async def register_user(
 
 
 async def start_session(session: AsyncSession, user: User) -> tuple[str, str]:
-    access = create_access_token(user.id)
+    access = create_access_token(user.id, session_version=user.session_version)
     refresh, _ = await issue_refresh_token(session, user.id)
     await session.commit()
     return access, refresh
