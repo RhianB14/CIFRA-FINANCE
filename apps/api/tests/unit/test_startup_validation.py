@@ -1,4 +1,5 @@
 import pytest
+from cryptography.fernet import Fernet
 
 import app.core.settings as settings_module
 from app.main import app
@@ -21,7 +22,7 @@ async def test_startup_fails_without_signing_key_outside_test(
 
 async def test_startup_passes_with_strong_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("JWT_SIGNING_KEY", "a" * 48)
-    monkeypatch.setenv("TOTP_ENCRYPTION_KEY", "b" * 48)
+    monkeypatch.setenv("TOTP_ENCRYPTION_KEY", Fernet.generate_key().decode())
     settings_module.get_settings.cache_clear()
     try:
         async with app.router.lifespan_context(app):
