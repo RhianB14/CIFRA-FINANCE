@@ -83,7 +83,7 @@ def _ensure_rotatable(row: RefreshToken) -> None:
         raise ReuseDetectedError("refresh token already used")
 
 
-async def _revoke_all_user_tokens(session: AsyncSession, user_id: uuid.UUID) -> None:
+async def revoke_all_refresh_tokens(session: AsyncSession, user_id: uuid.UUID) -> None:
     result = await session.execute(
         select(RefreshToken).where(
             RefreshToken.user_id == user_id,
@@ -108,7 +108,7 @@ async def rotate_refresh_token(
     try:
         _ensure_rotatable(row)
     except ReuseDetectedError:
-        await _revoke_all_user_tokens(session, user_id)
+        await revoke_all_refresh_tokens(session, user_id)
         session_version = await bump_session_version(session, user_id)
         await session.commit()
         await publish_session_version(user_id, session_version, client=redis_client)

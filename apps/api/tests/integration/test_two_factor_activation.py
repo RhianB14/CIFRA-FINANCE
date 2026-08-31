@@ -75,13 +75,13 @@ async def test_activation_invalidates_old_access_and_refresh(
     old_refresh = str(original["refresh_token"])
     _, activated = await activate(client, old_access)
     old_me = await client.get("/auth/me", headers={"Authorization": f"Bearer {old_access}"})
-    old_rotation = await client.post("/auth/refresh", json={"refresh_token": old_refresh})
     assert old_me.status_code == 401
-    assert old_rotation.status_code == 401
     new_access = str(activated["access_token"])
     assert decode_access_token(new_access)["sv"] == 2
     new_me = await client.get("/auth/me", headers={"Authorization": f"Bearer {new_access}"})
     assert new_me.status_code == 200
+    old_rotation = await client.post("/auth/refresh", json={"refresh_token": old_refresh})
+    assert old_rotation.status_code == 401
 
 
 async def test_enrollment_code_cannot_authenticate_same_step(

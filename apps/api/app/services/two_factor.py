@@ -13,6 +13,8 @@ from app.core.totp import (
     verify_totp,
 )
 from app.models import BackupCode, User
+from app.services.rotation import revoke_all_refresh_tokens
+from app.services.session_revocation import bump_session_version
 
 
 class TwoFactorError(Exception):
@@ -74,9 +76,11 @@ async def confirm_totp(session: AsyncSession, user: User, code: str) -> list[str
     user.totp_secret_encrypted = user.totp_pending_secret_encrypted
     user.totp_pending_secret_encrypted = None
     user.totp_enabled = True
-    user.totp_last_step = None
+    user.totp_last_step = step
     user.totp_confirmed_at = datetime.now(UTC)
-    await session.commit()
+    await revoke_all_refresh_tokens(session, user.id)
+    user.session_version = await bump_session_version(session, user.id)
+    await session.flush()
     return codes
 
 
