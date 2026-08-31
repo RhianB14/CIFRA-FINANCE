@@ -15,8 +15,12 @@ class DependencyCheck:
     check: Callable[[], Awaitable[None]]
 
 
+def _asyncpg_dsn(url: str) -> str:
+    return url.replace("postgresql+asyncpg://", "postgresql://", 1)
+
+
 async def check_postgres(settings: Settings) -> None:
-    connection = await asyncpg.connect(settings.database_url, timeout=3)
+    connection = await asyncpg.connect(_asyncpg_dsn(settings.database_url), timeout=3)
     try:
         await connection.execute("SELECT 1")
     finally:

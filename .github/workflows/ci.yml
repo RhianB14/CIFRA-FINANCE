@@ -167,19 +167,6 @@ jobs:
       - name: apply migrations
         run: docker compose exec -T api uv run --no-sync alembic upgrade head
       - name: auth smoke test
-        run: |
-          set -euo pipefail
-          EMAIL="smoke-$RANDOM@example.com"
-          BODY='{"email":"'$EMAIL'","password":"CorrectHorse-9x!LongEnough","name":"Smoke"}'
-          curl --fail -s -o /dev/null -w "register:%{http_code}\n" -X POST http://localhost:18000/auth/register -H 'Content-Type: application/json' -d "$BODY"
-          LOGIN=$(curl --fail -s -X POST http://localhost:18000/auth/login -H 'Content-Type: application/json' -d '{"email":"'$EMAIL'","password":"CorrectHorse-9x!LongEnough"}')
-          ACCESS=$(echo "$LOGIN" | python3 -c 'import json,sys;print(json.load(sys.stdin)["access_token"])')
-          REFRESH=$(echo "$LOGIN" | python3 -c 'import json,sys;print(json.load(sys.stdin)["refresh_token"])')
-          curl --fail -s -o /dev/null -w "me:%{http_code}\n" http://localhost:18000/auth/me -H "Authorization: Bearer $ACCESS"
-          NEW=$(curl --fail -s -X POST http://localhost:18000/auth/refresh -H 'Content-Type: application/json' -d '{"refresh_token":"'$REFRESH'"}')
-          curl --fail -s -o /dev/null -w "replayed-refresh-rejected:%{http_code}\n" -X POST http://localhost:18000/auth/refresh -H 'Content-Type: application/json' -d '{"refresh_token":"'$REFRESH'"}' || test $? -eq 22
-          LOGOUT_REFRESH=$(echo "$NEW" | python3 -c 'import json,sys;print(json.load(sys.stdin)["refresh_token"])')
-          curl --fail -s -o /dev/null -w "logout:%{http_code}\n" -X POST http://localhost:18000/auth/logout -H 'Content-Type: application/json' -d '{"refresh_token":"'$LOGOUT_REFRESH'"}'
-          curl -s -o /dev/null -w "token-reuse-rejected:%{http_code}\n" -X POST http://localhost:18000/auth/refresh -H 'Content-Type: application/json' -d '{"refresh_token":"'$LOGOUT_REFRESH'"}' && exit 1 || test $? -eq 22
+        run: python3 scripts/auth_smoke.py
       - if: always()
         run: docker compose down
