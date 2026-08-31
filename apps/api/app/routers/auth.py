@@ -103,6 +103,11 @@ async def register(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="email is already registered"
         ) from None
+    except AuthenticationError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="password does not meet security requirements",
+        ) from None
     except ValueError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)

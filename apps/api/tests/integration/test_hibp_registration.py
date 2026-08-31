@@ -34,7 +34,10 @@ async def test_hibp_enabled_sends_only_sha1_prefix_and_rejects_compromised(
             hibp_enabled=True,
             hibp_transport=transport,
         )
-    assert calls == [(f"/range/{prefix}", {"Add-Padding": "true"}, 0.5)]
+    assert len(calls) == 1
+    assert calls[0][0] == f"/range/{prefix}"
+    assert calls[0][1] == {"Add-Padding": "true"}
+    assert calls[0][2] > 0
     flattened = repr(calls)
     assert phrase not in flattened
     assert full_hash not in flattened

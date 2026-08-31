@@ -3,7 +3,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.emails import normalize_email
+from app.core.hibp import HIBPClient, HIBPTransport, http_hibp_transport
 from app.core.passwords import hash_password, validate_password, verify_password
+from app.core.settings import get_settings
 from app.core.tokens import create_access_token
 from app.models import User
 from app.services.rotation import issue_refresh_token
@@ -27,8 +29,20 @@ async def register_user(
     email: str,
     password: str,
     name: str,
+    hibp_enabled: bool | None = None,
+    hibp_transport: HIBPTransport | None = None,
 ) -> tuple[User, str, str]:
     validate_password(password)
+    settings = get_settings()
+    enabled = settings.hibp_enabled if hibp_enabled is None else hibp_enabled
+    if enabled:
+        client = HIBPClient(
+            transport=hibp_transport if hibp_transport is not None else http_hibp_transport,
+            timeout_seconds=settings.hibp_timeout_seconds,
+            fail_closed=True,
+        )
+        if await client.check_password(password):
+            raise AuthenticationError("password is compromised")
     normalized = normalize_email(email)
     if await get_user_by_email(session, normalized) is not None:
         raise EmailAlreadyRegisteredError("email is already registered")
