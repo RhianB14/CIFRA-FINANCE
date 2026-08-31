@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from cryptography.fernet import Fernet
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +23,7 @@ class Settings(BaseSettings):
     totp_encryption_key: str = ""
     backup_code_pepper: str = ""
     totp_issuer: str = "CIFRA"
+    totp_period: int = 30
     totp_drift_seconds: int = 30
 
     argon2_time_cost: int = 3
@@ -66,5 +68,10 @@ def ensure_secure_configuration(
         problems.append("totp_encryption_key must be set outside the test environment")
     elif settings.totp_encryption_key == settings.jwt_signing_key:
         problems.append("totp_encryption_key must differ from jwt_signing_key")
+    else:
+        try:
+            Fernet(settings.totp_encryption_key.encode("utf-8"))
+        except (ValueError, TypeError) as error:
+            problems.append(f"totp_encryption_key must be a valid Fernet key: {error}")
     if problems:
         raise RuntimeError("; ".join(problems))

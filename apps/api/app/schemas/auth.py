@@ -36,6 +36,7 @@ class RefreshRequest(BaseModel):
 
 class SetupTwoFactorResponse(BaseModel):
     otpauth_uri: str
+    qr_data_uri: str
 
 
 class VerifyTwoFactorResponse(BaseModel):

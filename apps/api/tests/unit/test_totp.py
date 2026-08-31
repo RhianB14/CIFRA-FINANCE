@@ -103,10 +103,11 @@ def test_backup_codes_format_and_count() -> None:
         assert code[4] == "-"
 
 
-def test_backup_code_hash_is_sha256_hex() -> None:
+def test_backup_code_hash_is_deterministic_hex_and_peppered() -> None:
     assert hash_backup_code("ABCD-EFGH") == hash_backup_code("ABCD-EFGH")
     digest = hash_backup_code("ABCD-EFGH")
     assert len(digest) == 64
     import hashlib
 
-    assert digest == hashlib.sha256(b"ABCD-EFGH").hexdigest()
+    plain = hashlib.sha256(b"ABCD-EFGH").hexdigest()
+    assert digest != plain

@@ -13,6 +13,7 @@ from app.core.tokens import (
     decode_access_token,
     decode_refresh_token,
 )
+from app.core.totp import qr_data_uri
 from app.models import User
 from app.schemas.auth import (
     ChallengeRequest,
@@ -235,7 +236,7 @@ async def setup_two_factor(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="two factor is already enabled"
         ) from None
-    return SetupTwoFactorResponse(otpauth_uri=uri)
+    return SetupTwoFactorResponse(otpauth_uri=uri, qr_data_uri=qr_data_uri(uri))
 
 
 @router.post("/2fa/verify")

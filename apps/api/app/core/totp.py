@@ -8,10 +8,15 @@ import segno
 
 from app.core.settings import get_settings
 
-TOTP_ISSUER = "CIFRA"
-TOTP_PERIOD = 30
-TOTP_DRIFT_WINDOWS = 1
 BACKUP_CODE_COUNT = 10
+
+
+def totp_period() -> int:
+    return get_settings().totp_period
+
+
+def totp_drift_windows() -> int:
+    return max(get_settings().totp_drift_seconds // totp_period(), 0)
 
 
 def generate_totp_secret() -> str:
@@ -19,9 +24,9 @@ def generate_totp_secret() -> str:
 
 
 def provisioning_uri(email: str, secret: str) -> str:
-    return pyotp.TOTP(secret).provisioning_uri(
+    return pyotp.TOTP(secret, interval=totp_period()).provisioning_uri(
         name=email,
-        issuer_name=TOTP_ISSUER,
+        issuer_name=get_settings().totp_issuer,
     )
 
 
@@ -42,11 +47,12 @@ def verify_totp(
     normalized = code.strip().replace(" ", "")
     if not normalized.isdigit() or len(normalized) != 6:
         return False, None
-    totp = pyotp.TOTP(secret)
-    current_step = int((now if now is not None else _now()) // TOTP_PERIOD)
-    for offset in range(TOTP_DRIFT_WINDOWS, -1, -1):
+    period = totp_period()
+    totp = pyotp.TOTP(secret, interval=period)
+    current_step = int((now if now is not None else _now()) // period)
+    for offset in range(totp_drift_windows(), -1, -1):
         candidate_step = current_step - offset
-        candidate = totp.at(candidate_step * TOTP_PERIOD)
+        candidate = totp.at(candidate_step * period)
         if normalized == candidate:
             if last_step is not None and candidate_step <= last_step:
                 return False, None

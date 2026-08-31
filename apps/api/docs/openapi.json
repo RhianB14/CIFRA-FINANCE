@@ -115,9 +115,9 @@
         "operationId": "login_auth_login_post",
         "requestBody": {
           "content": {
-            "application/json": {
+            "application/x-www-form-urlencoded": {
               "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
+                "$ref": "#/components/schemas/Body_login_auth_login_post"
               }
             }
           },
@@ -293,7 +293,7 @@
         },
         "security": [
           {
-            "HTTPBearer": []
+            "OAuth2PasswordBearer": []
           }
         ]
       }
@@ -319,7 +319,7 @@
         },
         "security": [
           {
-            "HTTPBearer": []
+            "OAuth2PasswordBearer": []
           }
         ]
       }
@@ -365,7 +365,7 @@
         },
         "security": [
           {
-            "HTTPBearer": []
+            "OAuth2PasswordBearer": []
           }
         ]
       }
@@ -415,7 +415,7 @@
         },
         "security": [
           {
-            "HTTPBearer": []
+            "OAuth2PasswordBearer": []
           }
         ]
       }
@@ -423,6 +423,65 @@
   },
   "components": {
     "schemas": {
+      "Body_login_auth_login_post": {
+        "properties": {
+          "grant_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^password$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant Type"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "title": "Password"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": ""
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "format": "password",
+            "title": "Client Secret"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Body_login_auth_login_post"
+      },
       "ChallengeRequest": {
         "properties": {
           "challenge_id": {
@@ -460,6 +519,12 @@
       },
       "DisableTwoFactorRequest": {
         "properties": {
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password"
+          },
           "code": {
             "type": "string",
             "maxLength": 16,
@@ -469,6 +534,7 @@
         },
         "type": "object",
         "required": [
+          "password",
           "code"
         ],
         "title": "DisableTwoFactorRequest"
@@ -485,27 +551,6 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
-      },
-      "LoginRequest": {
-        "properties": {
-          "email": {
-            "type": "string",
-            "format": "email",
-            "title": "Email"
-          },
-          "password": {
-            "type": "string",
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "Password"
-          }
-        },
-        "type": "object",
-        "required": [
-          "email",
-          "password"
-        ],
-        "title": "LoginRequest"
       },
       "MeResponse": {
         "properties": {
@@ -583,11 +628,16 @@
           "otpauth_uri": {
             "type": "string",
             "title": "Otpauth Uri"
+          },
+          "qr_data_uri": {
+            "type": "string",
+            "title": "Qr Data Uri"
           }
         },
         "type": "object",
         "required": [
-          "otpauth_uri"
+          "otpauth_uri",
+          "qr_data_uri"
         ],
         "title": "SetupTwoFactorResponse"
       },
@@ -682,9 +732,14 @@
       }
     },
     "securitySchemes": {
-      "HTTPBearer": {
-        "type": "http",
-        "scheme": "bearer"
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "flows": {
+          "password": {
+            "scopes": {},
+            "tokenUrl": "auth/login"
+          }
+        }
       }
     }
   }
