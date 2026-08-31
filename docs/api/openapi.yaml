@@ -1,0 +1,478 @@
+components:
+  schemas:
+    Body_login_auth_login_post:
+      properties:
+        client_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Client Id
+        client_secret:
+          anyOf:
+          - type: string
+          - type: 'null'
+          format: password
+          title: Client Secret
+        grant_type:
+          anyOf:
+          - pattern: ^password$
+            type: string
+          - type: 'null'
+          title: Grant Type
+        password:
+          format: password
+          title: Password
+          type: string
+        scope:
+          default: ''
+          title: Scope
+          type: string
+        username:
+          title: Username
+          type: string
+      required:
+      - username
+      - password
+      title: Body_login_auth_login_post
+      type: object
+    ChallengeRequest:
+      properties:
+        challenge_id:
+          title: Challenge Id
+          type: string
+        code:
+          maxLength: 16
+          minLength: 1
+          title: Code
+          type: string
+      required:
+      - challenge_id
+      - code
+      title: ChallengeRequest
+      type: object
+    ConfirmTwoFactorRequest:
+      properties:
+        code:
+          maxLength: 16
+          minLength: 6
+          title: Code
+          type: string
+      required:
+      - code
+      title: ConfirmTwoFactorRequest
+      type: object
+    DisableTwoFactorRequest:
+      properties:
+        code:
+          maxLength: 16
+          minLength: 1
+          title: Code
+          type: string
+        password:
+          maxLength: 128
+          minLength: 1
+          title: Password
+          type: string
+      required:
+      - password
+      - code
+      title: DisableTwoFactorRequest
+      type: object
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          title: Detail
+          type: array
+      title: HTTPValidationError
+      type: object
+    MeResponse:
+      properties:
+        email:
+          format: email
+          title: Email
+          type: string
+        id:
+          format: uuid
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+        totp_enabled:
+          title: Totp Enabled
+          type: boolean
+      required:
+      - id
+      - email
+      - name
+      - totp_enabled
+      title: MeResponse
+      type: object
+    RefreshRequest:
+      properties:
+        refresh_token:
+          title: Refresh Token
+          type: string
+      required:
+      - refresh_token
+      title: RefreshRequest
+      type: object
+    RegisterRequest:
+      properties:
+        email:
+          format: email
+          title: Email
+          type: string
+        name:
+          maxLength: 255
+          minLength: 1
+          title: Name
+          type: string
+        password:
+          maxLength: 128
+          minLength: 1
+          title: Password
+          type: string
+      required:
+      - email
+      - password
+      - name
+      title: RegisterRequest
+      type: object
+    SetupTwoFactorResponse:
+      properties:
+        otpauth_uri:
+          title: Otpauth Uri
+          type: string
+        qr_data_uri:
+          title: Qr Data Uri
+          type: string
+      required:
+      - otpauth_uri
+      - qr_data_uri
+      title: SetupTwoFactorResponse
+      type: object
+    TokenPair:
+      properties:
+        access_token:
+          title: Access Token
+          type: string
+        refresh_token:
+          title: Refresh Token
+          type: string
+        token_type:
+          default: bearer
+          title: Token Type
+          type: string
+      required:
+      - access_token
+      - refresh_token
+      title: TokenPair
+      type: object
+    ValidationError:
+      properties:
+        ctx:
+          title: Context
+          type: object
+        input:
+          title: Input
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          title: Location
+          type: array
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+      type: object
+    VerifyTwoFactorResponse:
+      properties:
+        access_token:
+          title: Access Token
+          type: string
+        backup_codes:
+          items:
+            type: string
+          title: Backup Codes
+          type: array
+        refresh_token:
+          title: Refresh Token
+          type: string
+      required:
+      - access_token
+      - refresh_token
+      - backup_codes
+      title: VerifyTwoFactorResponse
+      type: object
+  securitySchemes:
+    OAuth2PasswordBearer:
+      flows:
+        password:
+          scopes: {}
+          tokenUrl: auth/login
+      type: oauth2
+info:
+  title: Cifra API
+  version: 0.2.0
+openapi: 3.1.0
+paths:
+  /auth/2fa/challenge:
+    post:
+      operationId: two_factor_challenge_auth_2fa_challenge_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChallengeRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Two Factor Challenge
+      tags:
+      - auth
+  /auth/2fa/disable:
+    post:
+      operationId: disable_two_factor_auth_2fa_disable_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisableTwoFactorRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                title: Response Disable Two Factor Auth 2Fa Disable Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Disable Two Factor
+      tags:
+      - auth
+  /auth/2fa/setup:
+    post:
+      operationId: setup_two_factor_auth_2fa_setup_post
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupTwoFactorResponse'
+          description: Successful Response
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Setup Two Factor
+      tags:
+      - auth
+  /auth/2fa/verify:
+    post:
+      operationId: verify_two_factor_auth_2fa_verify_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmTwoFactorRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyTwoFactorResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Verify Two Factor
+      tags:
+      - auth
+  /auth/login:
+    post:
+      operationId: login_auth_login_post
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Body_login_auth_login_post'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/TokenPair'
+                - additionalProperties: true
+                  type: object
+                title: Response Login Auth Login Post
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Login
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      operationId: logout_auth_logout_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+        required: true
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Logout
+      tags:
+      - auth
+  /auth/me:
+    get:
+      operationId: me_auth_me_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+          description: Successful Response
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Me
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      operationId: refresh_auth_refresh_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Refresh
+      tags:
+      - auth
+  /auth/register:
+    post:
+      operationId: register_auth_register_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Register
+      tags:
+      - auth
+  /health/live:
+    get:
+      operationId: live_health_live_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                title: Response Live Health Live Get
+                type: object
+          description: Successful Response
+      summary: Live
+      tags:
+      - health
+  /health/ready:
+    get:
+      operationId: ready_health_ready_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  anyOf:
+                  - type: string
+                  - additionalProperties:
+                      type: string
+                    type: object
+                title: Response Ready Health Ready Get
+                type: object
+          description: Successful Response
+      summary: Ready
+      tags:
+      - health
