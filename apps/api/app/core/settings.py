@@ -46,9 +46,14 @@ CONFIG_VALIDATION_EXEMPT_ENVIRONMENTS = frozenset({"test"})
 
 def ensure_secure_configuration(
     settings: Settings,
-    exempt_environments: frozenset[str] | set[str] = CONFIG_VALIDATION_EXEMPT_ENVIRONMENTS,
+    exempt_environments: frozenset[str] | set[str] | None = None,
 ) -> None:
-    if settings.environment in exempt_environments:
+    exemptions = (
+        CONFIG_VALIDATION_EXEMPT_ENVIRONMENTS
+        if exempt_environments is None
+        else exempt_environments
+    )
+    if settings.environment in exemptions:
         return
     problems: list[str] = []
     minimum_signing_key_length = 32

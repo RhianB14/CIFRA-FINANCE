@@ -65,6 +65,10 @@ async def table_names(url: str) -> set[str]:
 
 
 os.environ["DATABASE_URL"] = async_url(PERSISTENCE_DB)
+os.environ.setdefault("REDIS_URL", os.environ.get("TEST_REDIS_URL", "redis://localhost:6379/15"))
+os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault("JWT_SIGNING_KEY", "unit-test-signing-key-0123456789abcdef0123456789abcdef")
+os.environ.setdefault("TOTP_ENCRYPTION_KEY", "unit-test-totp-key-0123456789abcdef0123456789abcdef")
 
 
 @pytest.fixture(scope="session")
