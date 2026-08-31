@@ -71,7 +71,7 @@ pnpm --filter @cifra/api openapi:check
 
 ## Autenticação
 
-Endpoints da F1, todos sob `/auth` (spec completa em `apps/api/docs/openapi.json` ou `/docs` na API):
+Endpoints da F1, todos sob `/auth` (spec autoritativa em `docs/api/openapi.yaml`, servida em `/docs` pela API):
 
 | Endpoint | Função |
 |---|---|
@@ -80,12 +80,12 @@ Endpoints da F1, todos sob `/auth` (spec completa em `apps/api/docs/openapi.json
 | `POST /auth/2fa/challenge` | Troca `challenge_id` + código TOTP/backup por tokens |
 | `POST /auth/refresh` | Rotaciona o refresh token; reuso de token revogado revoga a família |
 | `POST /auth/logout` | Revoga a sessão apresentada |
-| `GET /auth/me` | Dados do usuário autenticado (Bearer) |
+| `GET /auth/me` | Dados do usuário autenticado (Bearer); rejeita contas desativadas (401) |
 | `POST /auth/2fa/setup` | Inicia enrollment TOTP (URI otpauth + QR) |
 | `POST /auth/2fa/verify` | Confirma o código e retorna backup codes de uso único |
-| `POST /auth/2fa/disable` | Desativa o 2FA (exige código válido) |
+| `POST /auth/2fa/disable` | Desativa o 2FA (exige senha e código/backup válido) |
 
-Access token dura 15 minutos (HS256, claims `iss`, `aud`, `typ`, `jti`, `sub`, `sv`). Refresh dura 30 dias, é rotacionado a cada uso e só existe no banco como SHA-256. Reuso de refresh revogado revoga toda a família e bumpa a versão global de sessão no Redis. Senhas em Argon2id; HIBP é opt-in (`HIBP_ENABLED=true`). Segredos TOTP são criptografados com Fernet (`TOTP_ENCRYPTION_KEY`). Rate limiting e account lockout ficam para a F1.5.
+Access token dura 15 minutos (HS256, claims `iss`, `aud`, `typ`, `jti`, `sub`, `sv`). Refresh dura 30 dias, é rotacionado a cada uso e só existe no banco como SHA-256. Reuso de refresh revogado revoga toda a família e invalida as sessões do usuário via versão de sessão durável no banco publicada no Redis; a API responde 503 se o Redis estiver indisponível (fail-closed). Senhas em Argon2id com rehash transparente no login; o registro consulta o HIBP k-anonymity quando `HIBP_ENABLED=true` e rejeita senhas vazadas. Segredos TOTP são criptografados com Fernet (`TOTP_ENCRYPTION_KEY`, validada no startup) e os backup codes são HMAC-SHA256 com pepper independente (`BACKUP_CODE_PEPPER`). Desativar o 2FA exige senha e segundo fator. Ativar o 2FA encerra as sessões anteriores. Rate limiting e account lockout ficam para a F1.5.
 
 Para gerar as chaves locais:
 

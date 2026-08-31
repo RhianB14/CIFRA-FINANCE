@@ -21,6 +21,14 @@
 
 **Placar: 7/8 fechadas em Pre-0** (a 6 depende só do ato de comprar o domínio).
 
+### Revisão de 2026-08-31 (remediação da F1)
+
+A remediação da F1 (PR #12) atualizou os seguintes pontos com efeito de decisão:
+
+- **HIBP no registro**: o plano original previa k-anonymity opt-in; a implementação integra a checagem ao fluxo de registro (controlada por `HIBP_ENABLED`, default `false`) e rejeita senhas comprometidas com 422. A frase do plano v2 permanece compatível: a checagem só acontece quando habilitada.
+- **Modelo `audit_events`**: alinhado ao schema do plano (`actor_ip`, `entity_type`, `entity_id`, `before`, `after`, `occurred_at`). A política completa de audit log (retenção, consulta, exportação) segue na F1.5.
+- **Row-Level Security**: `bind_current_user` publica `app.current_user_id` por transação; as policies RLS nas tabelas multiusuário serão aplicadas na F1.5, junto da política de audit log (registrado em `docs/f1-follow-ups.md`).
+
 ### Domínio — verificação de disponibilidade (DNS, agosto/2026)
 
 Vários candidatos nominais (`cifra` em variações de TLD) estão registrados e indisponíveis. **`usarcifra.com.br`** — candidato recomendado — e **`usarcifra.app.br`** — alternativa — responderam NXDOMAIN, indicando disponibilidade provável.
