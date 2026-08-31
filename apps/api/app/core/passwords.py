@@ -25,6 +25,20 @@ def reset_hasher() -> None:
     _hasher = None
 
 
+class PasswordPolicyError(ValueError):
+    pass
+
+
+def validate_password(password: str) -> None:
+    settings = get_settings()
+    if len(password) < settings.password_min_length:
+        message = "password does not meet the minimum length requirement"
+        raise PasswordPolicyError(message)
+    if len(password) > settings.password_max_length:
+        message = "password exceeds the maximum allowed length"
+        raise PasswordPolicyError(message)
+
+
 def hash_password(password: str) -> str:
     return get_hasher().hash(password)
 
