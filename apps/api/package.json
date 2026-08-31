@@ -9,6 +9,8 @@
     "format:check": "uv run ruff format --check .",
     "typecheck": "uv run mypy --strict app tests",
     "test": "uv run pytest -q",
+    "openapi:check": "uv run python scripts/export_openapi.py --check",
+    "openapi:export": "uv run python scripts/export_openapi.py",
     "test:coverage": "uv run pytest --cov=app --cov-branch --cov-report=term-missing --cov-report=xml --cov-fail-under=70 && uv run coverage report --include=app/services/* --fail-under=85 --show-missing",
     "security:dependencies": "uv run pip-audit"
   }
