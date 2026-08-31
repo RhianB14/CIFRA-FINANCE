@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     refresh_token_ttl_days: int = 30
     two_factor_challenge_ttl_seconds: int = 300
 
-    totp_encryption_key: str = ""
+    totp_encryption_key: str | None = None
     totp_issuer: str = "Cifra"
     totp_drift_seconds: int = 30
 
@@ -39,3 +39,26 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+CONFIG_VALIDATION_EXEMPT_ENVIRONMENTS = frozenset({"test"})
+
+
+def ensure_secure_configuration(
+    settings: Settings,
+    exempt_environments: frozenset[str] | set[str] = CONFIG_VALIDATION_EXEMPT_ENVIRONMENTS,
+) -> None:
+    if settings.environment in exempt_environments:
+        return
+    problems: list[str] = []
+    minimum_signing_key_length = 32
+    if len(settings.jwt_signing_key) < minimum_signing_key_length:
+        problems.append(
+            "jwt_signing_key must be set with at least 32 characters outside the test environment"
+        )
+    if not settings.totp_encryption_key:
+        problems.append("totp_encryption_key must be set outside the test environment")
+    elif settings.totp_encryption_key == settings.jwt_signing_key:
+        problems.append("totp_encryption_key must differ from jwt_signing_key")
+    if problems:
+        raise RuntimeError("; ".join(problems))
