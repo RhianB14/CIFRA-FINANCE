@@ -19,8 +19,9 @@ class Settings(BaseSettings):
     refresh_token_ttl_days: int = 30
     two_factor_challenge_ttl_seconds: int = 300
 
-    totp_encryption_key: str | None = None
-    totp_issuer: str = "Cifra"
+    totp_encryption_key: str = ""
+    backup_code_pepper: str = ""
+    totp_issuer: str = "CIFRA"
     totp_drift_seconds: int = 30
 
     argon2_time_cost: int = 3

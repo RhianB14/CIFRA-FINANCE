@@ -1,9 +1,12 @@
 import hashlib
+import hmac
 import secrets
 import time
 
 import pyotp
 import segno
+
+from app.core.settings import get_settings
 
 TOTP_ISSUER = "CIFRA"
 TOTP_PERIOD = 30
@@ -62,5 +65,9 @@ def generate_backup_codes() -> list[str]:
     return codes
 
 
-def hash_backup_code(code: str) -> str:
-    return hashlib.sha256(code.strip().upper().encode("utf-8")).hexdigest()
+def hash_backup_code(code: str, pepper: str | None = None) -> str:
+    resolved = pepper if pepper is not None else get_settings().backup_code_pepper
+    if len(resolved.encode("utf-8")) < 32:
+        raise ValueError("backup code pepper must contain at least 32 bytes")
+    normalized = code.strip().upper().encode("utf-8")
+    return hmac.new(resolved.encode("utf-8"), normalized, hashlib.sha256).hexdigest()

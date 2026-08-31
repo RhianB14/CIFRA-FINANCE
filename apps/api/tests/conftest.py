@@ -70,6 +70,9 @@ os.environ.setdefault("REDIS_URL", os.environ.get("TEST_REDIS_URL", "redis://loc
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("JWT_SIGNING_KEY", "unit-test-signing-key-0123456789abcdef0123456789abcdef")
 os.environ.setdefault("TOTP_ENCRYPTION_KEY", Fernet.generate_key().decode())
+os.environ.setdefault(
+    "BACKUP_CODE_PEPPER", "unit-test-backup-pepper-0123456789abcdef0123456789abcdef"
+)
 
 
 @pytest.fixture(scope="session")
