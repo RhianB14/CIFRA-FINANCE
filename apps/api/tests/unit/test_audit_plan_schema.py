@@ -1,5 +1,3 @@
-from typing import Any, cast
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,8 +15,7 @@ async def test_audit_event_matches_master_plan_schema(db_session: AsyncSession) 
 
     before = {"key": "old-value"}
     after = {"key": "new-value"}
-    flexible_audit_event = cast(Any, AuditEvent)
-    event = flexible_audit_event(
+    event = AuditEvent(
         user_id=user.id,
         event_type="auth.login",
         actor_ip="127.0.0.1",
@@ -33,13 +30,12 @@ async def test_audit_event_matches_master_plan_schema(db_session: AsyncSession) 
     reloaded = (
         await db_session.execute(select(AuditEvent).where(AuditEvent.user_id == user.id))
     ).scalar_one()
-    readable = cast(Any, reloaded)
-    assert readable.entity_type == "user"
-    assert readable.entity_id == user.id
-    assert readable.before == before
-    assert readable.after == after
-    assert readable.actor_ip == "127.0.0.1"
-    assert readable.occurred_at is not None
+    assert reloaded.entity_type == "user"
+    assert reloaded.entity_id == user.id
+    assert reloaded.before == before
+    assert reloaded.after == after
+    assert reloaded.actor_ip == "127.0.0.1"
+    assert reloaded.occurred_at is not None
 
 
 async def test_user_defaults_to_active(db_session: AsyncSession) -> None:
@@ -54,12 +50,12 @@ async def test_user_defaults_to_active(db_session: AsyncSession) -> None:
     reloaded = (
         await db_session.execute(select(User).where(User.email == "audit.active@example.com"))
     ).scalar_one()
-    assert cast(Any, reloaded).is_active is True
+    assert reloaded.is_active is True
 
-    cast(Any, reloaded).is_active = False
+    reloaded.is_active = False
     await db_session.commit()
 
     persisted = (
         await db_session.execute(select(User).where(User.email == "audit.active@example.com"))
     ).scalar_one()
-    assert cast(Any, persisted).is_active is False
+    assert persisted.is_active is False

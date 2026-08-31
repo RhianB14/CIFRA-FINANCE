@@ -90,6 +90,8 @@ async def get_current_user(
     user = await session.get(User, user_id)
     if user is None:
         raise _credentials_error("unknown user")
+    if not user.is_active:
+        raise _credentials_error("account is inactive")
     await bind_current_user(session, user_id)
     return user
 

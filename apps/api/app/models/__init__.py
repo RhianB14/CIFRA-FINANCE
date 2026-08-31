@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import CHAR, CheckConstraint, ForeignKey, MetaData, String, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, validates
 
 NAMING_CONVENTION: dict[str, Any] = {
@@ -31,6 +31,7 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     session_version: Mapped[int] = mapped_column(default=1, server_default="1", nullable=False)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     totp_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
     totp_secret_encrypted: Mapped[str | None] = mapped_column(String(512), nullable=True)
     totp_pending_secret_encrypted: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -103,8 +104,11 @@ class AuditEvent(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
+    actor_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entity_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    before: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    after: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )

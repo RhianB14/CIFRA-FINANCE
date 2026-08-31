@@ -84,10 +84,10 @@ async def test_audit_event_defaults(db_session: AsyncSession) -> None:
     db_session.add(user)
     await db_session.commit()
 
-    event = AuditEvent(user_id=user.id, event_type="auth.login", ip_address="127.0.0.1")
+    event = AuditEvent(user_id=user.id, event_type="auth.login", actor_ip="127.0.0.1")
     db_session.add(event)
     await db_session.commit()
 
     stored = await db_session.get(AuditEvent, event.id)
     assert stored is not None
-    assert stored.created_at.tzinfo is not None
+    assert stored.occurred_at.tzinfo is not None
