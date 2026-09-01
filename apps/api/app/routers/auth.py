@@ -11,6 +11,7 @@ from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import bind_current_user, get_session
+from app.core.emails import normalize_email
 from app.core.hibp import HIBPUnavailableError
 from app.core.ratelimit import RateLimitExceeded, check_rate_limit, client_ip
 from app.core.settings import get_settings
@@ -34,6 +35,7 @@ from app.schemas.auth import (
     TwoFactorChallengeResponse,
     VerifyTwoFactorResponse,
 )
+from app.services import lockout
 from app.services.audit import AuditEventType, record_audit_event
 from app.services.auth import (
     AuthenticationError,
@@ -182,17 +184,25 @@ async def login(
 ) -> TokenPair | TwoFactorChallengeResponse:
     await _enforce_rate_limit(request, "login", LOGIN_RATE_LIMIT)
     peer = request.client.host if request.client is not None else None
+    identity = normalize_email(form.username)
+    if await lockout.is_locked(identity):
+        raise _credentials_error("invalid credentials") from None
     try:
         user = await authenticate_user(session, form.username, form.password)
     except AuthenticationError:
+        failures = await lockout.register_failure(identity)
+        locked_now = failures is not None and failures >= lockout.MAX_FAILURES
+        if locked_now:
+            await lockout.apply_lock(identity)
         await record_audit_event(
             session,
             event_type=AuditEventType.LOGIN_FAILED,
             actor_ip=peer,
-            after={"outcome": "invalid_credentials"},
+            after={"outcome": "invalid_credentials", "account_locked": locked_now},
         )
         await session.commit()
         raise _credentials_error("invalid credentials") from None
+    await lockout.reset_failures(identity)
     if user.totp_enabled:
         try:
             challenge_id = await _create_challenge(session, user)
