@@ -4,6 +4,7 @@ import pytest
 from argon2 import PasswordHasher
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db import bind_current_user
 from app.core.passwords import verify_password
 from app.models import User
 from app.services.auth import AuthenticationError, authenticate_user
@@ -20,6 +21,7 @@ async def old_hash_user(session: AsyncSession) -> User:
     )
     session.add(user)
     await session.commit()
+    await bind_current_user(session, user.id)
     return user
 
 

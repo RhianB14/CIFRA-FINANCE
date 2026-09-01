@@ -10,7 +10,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db import bind_current_user, get_session
+from app.core.db import bind_current_user, get_session, set_bypass_scope
 from app.core.emails import normalize_email
 from app.core.hibp import HIBPUnavailableError
 from app.core.ratelimit import RateLimitExceeded, check_rate_limit, client_ip
@@ -151,6 +151,7 @@ async def register(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenPair:
     await _enforce_rate_limit(http_request, "register", REGISTER_RATE_LIMIT)
+    await set_bypass_scope(session)
     try:
         _, access, refresh = await register_user(
             session, request.email, request.password, request.name
@@ -183,6 +184,7 @@ async def login(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenPair | TwoFactorChallengeResponse:
     await _enforce_rate_limit(request, "login", LOGIN_RATE_LIMIT)
+    await set_bypass_scope(session)
     peer = request.client.host if request.client is not None else None
     identity = normalize_email(form.username)
     if await lockout.is_locked(identity):
@@ -289,6 +291,7 @@ async def two_factor_challenge(
     request: ChallengeRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenPair:
+    await set_bypass_scope(session)
     try:
         data = await _consume_challenge(request.challenge_id)
     except SessionStoreUnavailableError:
@@ -323,6 +326,7 @@ async def refresh(
     request: RefreshRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenPair:
+    await set_bypass_scope(session)
     try:
         new_refresh_jwt, _ = await rotate_refresh_token(session, request.refresh_token)
     except SessionStoreUnavailableError:
@@ -345,6 +349,7 @@ async def logout(
     request: RefreshRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
+    await set_bypass_scope(session)
     try:
         revoked = await revoke_session(session, request.refresh_token)
     except (TokenNotFoundError, TokenValidationError):

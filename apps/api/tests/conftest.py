@@ -80,7 +80,10 @@ os.environ.setdefault(
 async def migrated_engine() -> AsyncIterator[AsyncEngine]:
     await recreate_database(PERSISTENCE_DB)
     await asyncio.to_thread(command.upgrade, alembic_config(PERSISTENCE_DB), "head")
-    engine = create_async_engine(async_url(PERSISTENCE_DB))
+    engine = create_async_engine(
+        async_url(PERSISTENCE_DB),
+        connect_args={"server_settings": {"role": "cifra_app"}},
+    )
     yield engine
     await engine.dispose()
 
@@ -89,9 +92,16 @@ async def migrated_engine() -> AsyncIterator[AsyncEngine]:
 async def db_session(migrated_engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
     factory = async_sessionmaker(migrated_engine, expire_on_commit=False, autoflush=False)
     async with factory() as session:
+        from app.core.db import set_bypass_scope
+
+        await set_bypass_scope(session)
         yield session
-    async with migrated_engine.begin() as connection:
-        await connection.execute(text("TRUNCATE " + ", ".join(F1_TABLES) + " CASCADE"))
+    admin_engine = create_async_engine(async_url(PERSISTENCE_DB))
+    try:
+        async with admin_engine.begin() as connection:
+            await connection.execute(text("TRUNCATE " + ", ".join(F1_TABLES) + " CASCADE"))
+    finally:
+        await admin_engine.dispose()
 
 
 @pytest.fixture(autouse=True)

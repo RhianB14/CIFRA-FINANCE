@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.services.two_factor as two_factor_module
 from app.core.crypto import decrypt_secret
+from app.core.db import bind_current_user
 from app.core.passwords import hash_password
 from app.models import BackupCode, RefreshToken, User
 from app.services.auth import start_session
@@ -26,6 +27,7 @@ async def enabled_user(session: AsyncSession) -> tuple[User, list[str]]:
     )
     session.add(user)
     await session.commit()
+    await bind_current_user(session, user.id)
     await setup_totp(session, user)
     seed = decrypt_secret(assert_value(user.totp_pending_secret_encrypted))
     code = pyotp.TOTP(seed).at(int(time.time()))
