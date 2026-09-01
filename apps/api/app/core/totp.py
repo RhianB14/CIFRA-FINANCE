@@ -50,8 +50,9 @@ def verify_totp(
     period = totp_period()
     totp = pyotp.TOTP(secret, interval=period)
     current_step = int((now if now is not None else _now()) // period)
-    for offset in range(totp_drift_windows(), -1, -1):
-        candidate_step = current_step - offset
+    drift = totp_drift_windows()
+    for offset in range(-drift, drift + 1):
+        candidate_step = current_step + offset
         candidate = totp.at(candidate_step * period)
         if normalized == candidate:
             if last_step is not None and candidate_step <= last_step:

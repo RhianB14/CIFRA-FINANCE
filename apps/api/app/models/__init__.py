@@ -39,7 +39,6 @@ class User(Base):
     totp_confirmed_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
-    totp_drift_seconds: Mapped[int] = mapped_column(default=30, nullable=False)
     locale: Mapped[str] = mapped_column(CHAR(5), default="pt-BR", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False

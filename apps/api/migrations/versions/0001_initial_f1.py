@@ -29,7 +29,6 @@ def upgrade() -> None:
         sa.Column("totp_pending_secret_encrypted", sa.String(length=512), nullable=True),
         sa.Column("totp_last_step", sa.Integer(), nullable=True),
         sa.Column("totp_confirmed_at", timestamp_tz, nullable=True),
-        sa.Column("totp_drift_seconds", sa.Integer(), nullable=False, server_default=sa.text("30")),
         sa.Column("locale", sa.CHAR(length=5), nullable=False, server_default=sa.text("'pt-BR'")),
         sa.Column("created_at", timestamp_tz, server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", timestamp_tz, server_default=sa.func.now(), nullable=False),
