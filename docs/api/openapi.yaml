@@ -36,6 +36,7 @@ components:
       title: Body_login_auth_login_post
       type: object
     ChallengeRequest:
+      additionalProperties: false
       properties:
         challenge_id:
           title: Challenge Id
@@ -51,6 +52,7 @@ components:
       title: ChallengeRequest
       type: object
     ConfirmTwoFactorRequest:
+      additionalProperties: false
       properties:
         code:
           maxLength: 16
@@ -62,6 +64,7 @@ components:
       title: ConfirmTwoFactorRequest
       type: object
     DisableTwoFactorRequest:
+      additionalProperties: false
       properties:
         code:
           maxLength: 16
@@ -88,6 +91,7 @@ components:
       title: HTTPValidationError
       type: object
     MeResponse:
+      additionalProperties: false
       properties:
         email:
           format: email
@@ -111,6 +115,7 @@ components:
       title: MeResponse
       type: object
     RefreshRequest:
+      additionalProperties: false
       properties:
         refresh_token:
           title: Refresh Token
@@ -120,6 +125,7 @@ components:
       title: RefreshRequest
       type: object
     RegisterRequest:
+      additionalProperties: false
       properties:
         email:
           format: email
@@ -142,6 +148,7 @@ components:
       title: RegisterRequest
       type: object
     SetupTwoFactorResponse:
+      additionalProperties: false
       properties:
         otpauth_uri:
           title: Otpauth Uri
@@ -155,6 +162,7 @@ components:
       title: SetupTwoFactorResponse
       type: object
     TokenPair:
+      additionalProperties: false
       properties:
         access_token:
           title: Access Token
@@ -172,6 +180,7 @@ components:
       title: TokenPair
       type: object
     TwoFactorChallengeResponse:
+      additionalProperties: false
       properties:
         challenge_id:
           title: Challenge Id
@@ -211,6 +220,7 @@ components:
       title: ValidationError
       type: object
     VerifyTwoFactorResponse:
+      additionalProperties: false
       properties:
         access_token:
           title: Access Token
