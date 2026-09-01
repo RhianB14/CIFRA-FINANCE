@@ -147,6 +147,12 @@ async def get_current_user(
     if isinstance(session_version_value, bool) or not isinstance(session_version_value, int):
         raise _credentials_error("invalid access token")
     session_version = session_version_value
+    await bind_current_user(session, user_id)
+    user = await session.get(User, user_id)
+    if user is None:
+        raise _credentials_error("unknown user")
+    if not user.is_active:
+        raise _credentials_error("account is inactive")
     try:
         if await session_invalid(session, user_id, session_version):
             raise _credentials_error("session has been revoked")
@@ -155,12 +161,6 @@ async def get_current_user(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="session dependency unavailable",
         ) from None
-    user = await session.get(User, user_id)
-    if user is None:
-        raise _credentials_error("unknown user")
-    if not user.is_active:
-        raise _credentials_error("account is inactive")
-    await bind_current_user(session, user_id)
     return user
 
 
