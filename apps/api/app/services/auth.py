@@ -87,6 +87,8 @@ async def authenticate_user(
     valid = verify_password(password_hash, password)
     if user is None or not valid:
         raise AuthenticationError("invalid credentials")
+    if not user.is_active:
+        raise AuthenticationError("invalid credentials")
     if needs_rehash(user.password_hash):
         user.password_hash = hash_password(password)
         await session.commit()

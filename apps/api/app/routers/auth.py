@@ -176,7 +176,7 @@ async def two_factor_challenge(
 ) -> TokenPair:
     user_id = await _consume_challenge(request.challenge_id)
     user = await session.get(User, user_id)
-    if user is None or not user.totp_enabled:
+    if user is None or not user.totp_enabled or not user.is_active:
         raise _credentials_error("invalid or expired challenge")
     try:
         await verify_second_factor(session, user, request.code)

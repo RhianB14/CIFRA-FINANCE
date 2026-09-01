@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.settings import get_settings
 from app.core.tokens import create_refresh_token, decode_refresh_token
-from app.models import RefreshToken
+from app.models import RefreshToken, User
 from app.services.session_revocation import (
     bump_session_version,
     publish_session_version,
@@ -105,6 +105,9 @@ async def rotate_refresh_token(
     row = await _load_token(session, jti_hash)
     if row.user_id != user_id:
         raise ReuseDetectedError("subject mismatch")
+    user = await session.get(User, user_id)
+    if user is None or not user.is_active:
+        raise ReuseDetectedError("account is inactive")
     try:
         _ensure_rotatable(row)
     except ReuseDetectedError:
