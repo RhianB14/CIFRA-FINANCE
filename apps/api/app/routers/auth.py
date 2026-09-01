@@ -11,6 +11,7 @@ from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import bind_current_user, get_session
+from app.core.hibp import HIBPUnavailableError
 from app.core.settings import get_settings
 from app.core.tokens import (
     TokenValidationError,
@@ -115,6 +116,11 @@ async def register(
     except EmailAlreadyRegisteredError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="email is already registered"
+        ) from None
+    except HIBPUnavailableError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="password breach service unavailable",
         ) from None
     except AuthenticationError:
         raise HTTPException(
