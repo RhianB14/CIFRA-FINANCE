@@ -35,11 +35,11 @@ def test_rejects_short_pepper() -> None:
     assert "backup_code_pepper" in str(raised.value)
 
 
-def test_rejects_pepper_measured_in_bytes_not_characters() -> None:
-    settings = make_settings(backup_code_pepper="ãããããããããããããããããããããããããããããããã")
-    with pytest.raises(RuntimeError) as raised:
-        ensure_secure_configuration(settings)
-    assert "backup_code_pepper" in str(raised.value)
+def test_pepper_minimum_is_measured_in_bytes_not_characters() -> None:
+    sixteen_multibyte_characters = "ã" * 16
+    assert len(sixteen_multibyte_characters) < 32
+    assert len(sixteen_multibyte_characters.encode("utf-8")) >= 32
+    ensure_secure_configuration(make_settings(backup_code_pepper=sixteen_multibyte_characters))
 
 
 def test_rejects_pepper_equal_to_jwt_signing_key() -> None:
