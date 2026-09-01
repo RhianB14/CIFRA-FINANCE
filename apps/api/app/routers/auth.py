@@ -1,8 +1,13 @@
+import json
+import secrets
 import uuid
+from dataclasses import dataclass
 from typing import Annotated
 
+import redis.asyncio as redis
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import bind_current_user, get_session
@@ -133,40 +138,77 @@ async def login(
     except AuthenticationError:
         raise _credentials_error("invalid credentials") from None
     if user.totp_enabled:
-        challenge_id = await _create_challenge(session, user)
+        try:
+            challenge_id = await _create_challenge(session, user)
+        except SessionStoreUnavailableError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="session dependency unavailable",
+            ) from None
         return {"challenge_id": challenge_id, "two_factor_required": True}
     access, refresh = await start_session(session, user)
     return TokenPair(access_token=access, refresh_token=refresh)
 
 
+CHALLENGE_KEY_PREFIX = "cifra:2fa-challenge:"
+CHALLENGE_PURPOSE = "login-2fa"
+CHALLENGE_ENTROPY_BYTES = 32
+
+
 def _challenge_key(challenge_id: str) -> str:
-    return "cifra:2fa-challenge:" + challenge_id
+    return CHALLENGE_KEY_PREFIX + challenge_id
+
+
+class ChallengePayloadError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class ChallengeData:
+    user_id: uuid.UUID
+    session_version: int
 
 
 async def _create_challenge(session: AsyncSession, user: User) -> str:
-    import redis.asyncio as redis
-
-    challenge_id = uuid.uuid4().hex
     ttl = get_settings().two_factor_challenge_ttl_seconds
-    client = redis.from_url(get_settings().redis_url, decode_responses=True)
+    challenge_id = secrets.token_hex(CHALLENGE_ENTROPY_BYTES)
+    payload = json.dumps(
+        {
+            "user_id": str(user.id),
+            "session_version": user.session_version,
+            "purpose": CHALLENGE_PURPOSE,
+        },
+        sort_keys=True,
+    )
+    store = redis.from_url(get_settings().redis_url, decode_responses=True)
     try:
-        await client.set(_challenge_key(challenge_id), str(user.id), ex=ttl)
+        await store.set(_challenge_key(challenge_id), payload, ex=ttl)
+    except (RedisError, OSError) as error:
+        raise SessionStoreUnavailableError("session dependency unavailable") from error
     finally:
-        await client.aclose()
+        await store.aclose()
     return challenge_id
 
 
-async def _consume_challenge(challenge_id: str) -> uuid.UUID:
-    import redis.asyncio as redis
-
-    client = redis.from_url(get_settings().redis_url, decode_responses=True)
+async def _consume_challenge(challenge_id: str) -> ChallengeData:
+    store = redis.from_url(get_settings().redis_url, decode_responses=True)
     try:
-        stored = await client.getdel(_challenge_key(challenge_id))
+        stored = await store.getdel(_challenge_key(challenge_id))
+    except (RedisError, OSError) as error:
+        raise SessionStoreUnavailableError("session dependency unavailable") from error
     finally:
-        await client.aclose()
+        await store.aclose()
     if stored is None:
         raise _credentials_error("invalid or expired challenge")
-    return uuid.UUID(stored)
+    try:
+        payload = json.loads(stored)
+        data = ChallengeData(
+            user_id=uuid.UUID(str(payload["user_id"])),
+            session_version=int(payload["session_version"]),
+        )
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
+        raise ChallengePayloadError("challenge payload is invalid") from error
+    return data
 
 
 @router.post("/2fa/challenge")
@@ -174,9 +216,19 @@ async def two_factor_challenge(
     request: ChallengeRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenPair:
-    user_id = await _consume_challenge(request.challenge_id)
-    user = await session.get(User, user_id)
+    try:
+        data = await _consume_challenge(request.challenge_id)
+    except SessionStoreUnavailableError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="session dependency unavailable",
+        ) from None
+    except ChallengePayloadError:
+        raise _credentials_error("invalid or expired challenge") from None
+    user = await session.get(User, data.user_id)
     if user is None or not user.totp_enabled or not user.is_active:
+        raise _credentials_error("invalid or expired challenge")
+    if user.session_version != data.session_version:
         raise _credentials_error("invalid or expired challenge")
     try:
         await verify_second_factor(session, user, request.code)
