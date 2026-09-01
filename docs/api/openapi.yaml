@@ -114,6 +114,35 @@ components:
       - totp_enabled
       title: MeResponse
       type: object
+    PasswordRecoveryRequest:
+      additionalProperties: false
+      properties:
+        email:
+          format: email
+          title: Email
+          type: string
+      required:
+      - email
+      title: PasswordRecoveryRequest
+      type: object
+    PasswordResetRequest:
+      additionalProperties: false
+      properties:
+        new_password:
+          maxLength: 128
+          minLength: 1
+          title: New Password
+          type: string
+        token:
+          maxLength: 256
+          minLength: 16
+          title: Token
+          type: string
+      required:
+      - token
+      - new_password
+      title: PasswordResetRequest
+      type: object
     RefreshRequest:
       additionalProperties: false
       properties:
@@ -410,6 +439,62 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Me
+      tags:
+      - auth
+  /auth/password-recovery:
+    post:
+      operationId: password_recovery_auth_password_recovery_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordRecoveryRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                title: Response Password Recovery Auth Password Recovery Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Password Recovery
+      tags:
+      - auth
+  /auth/password-reset:
+    post:
+      operationId: password_reset_auth_password_reset_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                title: Response Password Reset Auth Password Reset Post
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Password Reset
       tags:
       - auth
   /auth/refresh:

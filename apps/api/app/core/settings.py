@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     trusted_proxies: str = ""
     cors_allowed_origins: str = ""
 
+    password_reset_ttl_minutes: int = 15
+    password_reset_rate_limit_per_hour: int = 3
+    password_reset_resend_enabled: bool = False
+    resend_api_key: str = ""
+    resend_from: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
@@ -120,6 +126,10 @@ def ensure_secure_configuration(
         problems.append("two_factor_challenge_ttl_seconds must be greater than zero")
     if settings.hibp_timeout_seconds <= 0:
         problems.append("hibp_timeout_seconds must be greater than zero")
+    if settings.password_reset_ttl_minutes <= 0:
+        problems.append("password_reset_ttl_minutes must be greater than zero")
+    if settings.password_reset_rate_limit_per_hour <= 0:
+        problems.append("password_reset_rate_limit_per_hour must be greater than zero")
     if len(settings.jwt_signing_key.encode("utf-8", errors="replace")) < 32:
         problems.append(
             "jwt_signing_key must be set with at least 32 bytes outside the test environment"
@@ -151,6 +161,12 @@ def ensure_secure_configuration(
         )
         if pepper_problem:
             problems.append(pepper_problem)
+    if settings.environment == "production" and settings.password_reset_resend_enabled:
+        if not settings.resend_api_key or not settings.resend_from:
+            problems.append(
+                "resend_api_key and resend_from must be set when "
+                "password_reset_resend_enabled is true in production"
+            )
     if settings.backup_code_pepper and settings.backup_code_pepper == settings.jwt_signing_key:
         problems.append("backup_code_pepper must differ from jwt_signing_key")
     if settings.backup_code_pepper and settings.backup_code_pepper == settings.totp_encryption_key:

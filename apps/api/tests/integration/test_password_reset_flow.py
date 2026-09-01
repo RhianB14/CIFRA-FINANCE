@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import AsyncIterator
 
 import httpx
+import pytest
 import pytest_asyncio
 import redis.asyncio as redis
 from alembic import command
@@ -59,6 +60,25 @@ async def make_api_database() -> None:
         await admin.close()
 
 
+@pytest.fixture(autouse=True)
+async def _clean_reset_keys() -> AsyncIterator[None]:
+    store = redis.from_url(ENV["REDIS_URL"], decode_responses=True)
+    try:
+        keys = [key async for key in store.scan_iter(match="cifra:reset:*")]
+        if keys:
+            await store.delete(*keys)
+    finally:
+        await store.aclose()
+    yield
+    store = redis.from_url(ENV["REDIS_URL"], decode_responses=True)
+    try:
+        keys = [key async for key in store.scan_iter(match="cifra:reset:*")]
+        if keys:
+            await store.delete(*keys)
+    finally:
+        await store.aclose()
+
+
 @pytest_asyncio.fixture()
 async def api_engine() -> AsyncIterator[AsyncEngine]:
     await make_api_database()
@@ -106,6 +126,7 @@ async def client(api_engine: AsyncEngine) -> AsyncIterator[httpx.AsyncClient]:
     _gs.cache_clear()
     get_mailer.cache_clear()
     factory_app.dependency_overrides.pop(get_session, None)
+    factory_app.dependency_overrides.pop(get_mailer, None)
 
 
 async def register_user(client: httpx.AsyncClient, email: str) -> None:
@@ -128,6 +149,29 @@ async def _latest_reset_token() -> str:
         await store.aclose()
 
 
+class RecordingMailer:
+    def __init__(self) -> None:
+        self.tokens: list[str] = []
+
+    async def send_password_reset(self, email: str, token: str) -> None:
+        self.tokens.append(token)
+
+
+@pytest_asyncio.fixture()
+async def recording_mailer() -> AsyncIterator[RecordingMailer]:
+    from app.main import app as factory_app
+    from app.services.mailer import get_mailer
+
+    mailer = RecordingMailer()
+
+    async def override() -> RecordingMailer:
+        return mailer
+
+    factory_app.dependency_overrides[get_mailer] = override
+    yield mailer
+    factory_app.dependency_overrides.pop(get_mailer, None)
+
+
 class TestPasswordRecovery:
     async def test_recovery_answers_200_for_known_and_unknown_email(
         self,
@@ -147,13 +191,15 @@ class TestPasswordRecovery:
     async def test_reset_with_issued_token_reauthenticates(
         self,
         client: httpx.AsyncClient,
+        recording_mailer: RecordingMailer,
     ) -> None:
         await register_user(client, "reset-flow@example.com")
         await client.post("/auth/password-recovery", json={"email": "reset-flow@example.com"})
-        token = await _latest_reset_token()
+        assert len(recording_mailer.tokens) == 1
+        issued = recording_mailer.tokens[0]
         reset = await client.post(
             "/auth/password-reset",
-            json={"token": token, "new_password": NEW_PASSWORD},
+            json={"token": issued, "new_password": NEW_PASSWORD},
         )
         assert reset.status_code == 200
         login = await client.post(

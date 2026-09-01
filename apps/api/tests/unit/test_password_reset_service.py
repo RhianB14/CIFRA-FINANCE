@@ -1,4 +1,6 @@
+import hashlib
 import uuid
+from collections.abc import AsyncIterator
 
 import pytest
 import redis.asyncio as redis
@@ -10,6 +12,7 @@ from app.core.passwords import verify_password
 from app.core.settings import get_settings
 from app.models import User
 from app.services.password_reset import (
+    RESET_KEY_PREFIX,
     ResetStoreUnavailableError,
     ResetTokenInvalidError,
     consume_reset_token,
@@ -37,6 +40,23 @@ def redis_store() -> redis.Redis:
     return redis.from_url(get_settings().redis_url, decode_responses=True)
 
 
+async def _flush_reset_keys() -> None:
+    store = redis_store()
+    try:
+        keys = [key async for key in store.scan_iter(match="cifra:reset:*")]
+        if keys:
+            await store.delete(*keys)
+    finally:
+        await store.aclose()
+
+
+@pytest.fixture(autouse=True)
+async def _clean_reset_keys() -> AsyncIterator[None]:
+    await _flush_reset_keys()
+    yield
+    await _flush_reset_keys()
+
+
 @pytest.mark.asyncio
 async def test_issue_returns_raw_token_and_stores_hash_only(db_session: AsyncSession) -> None:
     user = await make_user(db_session)
@@ -47,9 +67,27 @@ async def test_issue_returns_raw_token_and_stores_hash_only(db_session: AsyncSes
         assert len(token) >= 43
         keys = [key async for key in store.scan_iter(match="cifra:reset:*")]
         assert len(keys) == 1
+        assert keys[0] == RESET_KEY_PREFIX + hashlib.sha256(token.encode("utf-8")).hexdigest()
         stored = await store.get(keys[0])
         assert stored is not None
         assert stored != token
+        ttl = await store.ttl(keys[0])
+        assert 0 < ttl <= 15 * 60
+    finally:
+        await store.aclose()
+
+
+@pytest.mark.asyncio
+async def test_issue_for_inactive_user_yields_unstored_token(db_session: AsyncSession) -> None:
+    user = await make_user(db_session)
+    user.is_active = False
+    await db_session.commit()
+    store = redis_store()
+    try:
+        token = await issue_reset_token(store, user.id, db_session)
+        assert isinstance(token, str)
+        keys = [key async for key in store.scan_iter(match="cifra:reset:*")]
+        assert len(keys) == 0
     finally:
         await store.aclose()
 
@@ -58,7 +96,7 @@ async def test_issue_returns_raw_token_and_stores_hash_only(db_session: AsyncSes
 async def test_issue_for_unknown_email_yields_unstored_token(db_session: AsyncSession) -> None:
     store = redis_store()
     try:
-        token = await issue_reset_token(store, uuid.uuid4())
+        token = await issue_reset_token(store, uuid.uuid4(), db_session)
         assert isinstance(token, str)
         keys = [key async for key in store.scan_iter(match="cifra:reset:*")]
         assert len(keys) == 0

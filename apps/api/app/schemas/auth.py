@@ -67,6 +67,19 @@ class DisableTwoFactorRequest(BaseModel):
     code: str = Field(min_length=1, max_length=16)
 
 
+class PasswordRecoveryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr
+
+
+class PasswordResetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=16, max_length=256)
+    new_password: str = Field(min_length=1, max_length=128)
+
+
 class MeResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
