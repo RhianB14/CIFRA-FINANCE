@@ -77,8 +77,10 @@ async def get_current_user(
     except TokenValidationError:
         raise _credentials_error("invalid access token") from None
     user_id = uuid.UUID(str(payload["sub"]))
-    raw_version = payload.get("sv", 1)
-    session_version = int(raw_version) if isinstance(raw_version, int) else 1
+    session_version_value = payload["sv"]
+    if isinstance(session_version_value, bool) or not isinstance(session_version_value, int):
+        raise _credentials_error("invalid access token")
+    session_version = session_version_value
     try:
         if await session_invalid(session, user_id, session_version):
             raise _credentials_error("session has been revoked")

@@ -18,6 +18,9 @@ def _encode(payload: dict[str, object]) -> str:
 
 def _decode(token: str, expected_type: str) -> dict[str, object]:
     settings = get_settings()
+    required = ["exp", "iat", "sub", "jti", "typ", "iss", "aud"]
+    if expected_type == "access":
+        required.append("sv")
     try:
         payload = pyjwt.decode(
             token,
@@ -25,17 +28,26 @@ def _decode(token: str, expected_type: str) -> dict[str, object]:
             algorithms=[JWT_ALGORITHM],
             issuer=settings.jwt_issuer,
             audience=settings.jwt_audience,
-            options={"require": ["exp", "iat", "sub", "jti", "typ", "iss", "aud"]},
+            options={"require": required},
         )
     except pyjwt.PyJWTError as error:
         raise TokenValidationError(str(error)) from error
     if payload.get("typ") != expected_type:
         raise TokenValidationError("unexpected token type")
+    if expected_type == "access":
+        _validate_session_version(payload.get("sv"))
     try:
         UUID(str(payload.get("sub")))
     except ValueError as error:
         raise TokenValidationError("invalid subject") from error
     return dict(payload)
+
+
+def _validate_session_version(value: object) -> None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TokenValidationError("invalid session version claim")
+    if value < 1:
+        raise TokenValidationError("invalid session version claim")
 
 
 def create_access_token(
