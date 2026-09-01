@@ -40,6 +40,7 @@ class Settings(BaseSettings):
 
     trust_proxy_headers: bool = False
     trusted_proxies: str = ""
+    cors_allowed_origins: str = ""
 
 
 @lru_cache
