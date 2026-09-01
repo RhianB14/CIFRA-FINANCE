@@ -99,10 +99,9 @@ async def test_check_rate_limit_window_expires_and_key_is_removed() -> None:
         await store.aclose()
 
 
-async def test_check_rate_limit_raises_typed_error_when_store_down() -> None:
+async def test_check_rate_limit_is_fail_open_when_store_down() -> None:
     class BrokenStore:
         async def eval(self, *args: object, **kwargs: object) -> int:
             raise RedisError("connection refused")
 
-    with pytest.raises(RedisError):
-        await check_rate_limit(BrokenStore(), "ratelimit:test:broken", 3, 60)
+    assert await check_rate_limit(BrokenStore(), "ratelimit:test:broken", 3, 60) is None

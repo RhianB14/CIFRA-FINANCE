@@ -5,6 +5,7 @@ from pathlib import Path
 
 import asyncpg
 import pytest
+import redis.asyncio as redis
 from alembic import command
 from alembic.config import Config
 from cryptography.fernet import Fernet
@@ -91,3 +92,22 @@ async def db_session(migrated_engine: AsyncEngine) -> AsyncIterator[AsyncSession
         yield session
     async with migrated_engine.begin() as connection:
         await connection.execute(text("TRUNCATE " + ", ".join(F1_TABLES) + " CASCADE"))
+
+
+@pytest.fixture(autouse=True)
+async def _clean_rate_limit_keys() -> AsyncIterator[None]:
+    client = redis.from_url(
+        os.environ.get("REDIS_URL", "redis://localhost:6379/15"), decode_responses=True
+    )
+    try:
+        await client.delete(
+            "cifra:ratelimit:register:testclient", "cifra:ratelimit:login:testclient"
+        )
+        yield
+    finally:
+        keys = []
+        async for key in client.scan_iter(match="cifra:ratelimit:*"):
+            keys.append(key)
+        if keys:
+            await client.delete(*keys)
+        await client.aclose()

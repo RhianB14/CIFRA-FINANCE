@@ -38,10 +38,17 @@ class Settings(BaseSettings):
     hibp_base_url: str = ""
     external_http_timeout_seconds: float = 5.0
 
+    trust_proxy_headers: bool = False
+    trusted_proxies: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def trusted_proxies_list(settings: Settings) -> tuple[str, ...]:
+    return tuple(item.strip() for item in settings.trusted_proxies.split(",") if item.strip())
 
 
 CONFIG_VALIDATION_EXEMPT_ENVIRONMENTS = frozenset({"test"})
@@ -85,9 +92,15 @@ def ensure_secure_configuration(
         if exempt_environments is None
         else exempt_environments
     )
-    if settings.environment in exemptions:
-        return
     problems: list[str] = []
+    if settings.trust_proxy_headers and not trusted_proxies_list(settings):
+        problems.append(
+            "trusted_proxies must list at least one proxy when trust_proxy_headers is enabled"
+        )
+    if settings.environment in exemptions:
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        return
     if settings.totp_period <= 0:
         problems.append("totp_period must be greater than zero")
     if settings.totp_drift_seconds < 0:
@@ -100,6 +113,10 @@ def ensure_secure_configuration(
         problems.append("two_factor_challenge_ttl_seconds must be greater than zero")
     if settings.hibp_timeout_seconds <= 0:
         problems.append("hibp_timeout_seconds must be greater than zero")
+    if settings.trust_proxy_headers and not trusted_proxies_list(settings):
+        problems.append(
+            "trusted_proxies must list at least one proxy when trust_proxy_headers is enabled"
+        )
     if len(settings.jwt_signing_key.encode("utf-8", errors="replace")) < 32:
         problems.append(
             "jwt_signing_key must be set with at least 32 bytes outside the test environment"

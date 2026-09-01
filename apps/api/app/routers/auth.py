@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import bind_current_user, get_session
 from app.core.hibp import HIBPUnavailableError
+from app.core.ratelimit import RateLimitExceeded, check_rate_limit, client_ip
 from app.core.settings import get_settings
 from app.core.tokens import (
     TokenValidationError,
@@ -65,6 +66,10 @@ from app.services.two_factor import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 oauth2 = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
+REGISTER_RATE_LIMIT = 3
+LOGIN_RATE_LIMIT = 5
+RATE_LIMIT_WINDOW_SECONDS = 60
+
 
 def _credentials_error(detail: str) -> HTTPException:
     return HTTPException(
@@ -72,6 +77,37 @@ def _credentials_error(detail: str) -> HTTPException:
         detail=detail,
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+def _rate_limit_error(retry_after: int) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail="too many requests",
+        headers={"Retry-After": str(max(1, retry_after))},
+    )
+
+
+async def _enforce_rate_limit(
+    request: Request,
+    bucket: str,
+    limit: int,
+) -> None:
+    settings = get_settings()
+    peer = request.client.host if request.client is not None else None
+    forwarded = request.headers.get("x-forwarded-for")
+    identity = client_ip(peer, forwarded, settings)
+    store = redis.from_url(settings.redis_url, decode_responses=True)
+    try:
+        await check_rate_limit(
+            store,
+            f"cifra:ratelimit:{bucket}:{identity}",
+            limit,
+            RATE_LIMIT_WINDOW_SECONDS,
+        )
+    except RateLimitExceeded as error:
+        raise _rate_limit_error(error.retry_after) from None
+    finally:
+        await store.aclose()
 
 
 async def get_current_user(
@@ -109,8 +145,10 @@ async def get_current_user(
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(
     request: RegisterRequest,
+    http_request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenPair:
+    await _enforce_rate_limit(http_request, "register", REGISTER_RATE_LIMIT)
     try:
         _, access, refresh = await register_user(
             session, request.email, request.password, request.name
@@ -142,14 +180,15 @@ async def login(
     form: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenPair | TwoFactorChallengeResponse:
-    client_ip = request.client.host if request.client is not None else None
+    await _enforce_rate_limit(request, "login", LOGIN_RATE_LIMIT)
+    peer = request.client.host if request.client is not None else None
     try:
         user = await authenticate_user(session, form.username, form.password)
     except AuthenticationError:
         await record_audit_event(
             session,
             event_type=AuditEventType.LOGIN_FAILED,
-            actor_ip=client_ip,
+            actor_ip=peer,
             after={"outcome": "invalid_credentials"},
         )
         await session.commit()
@@ -168,7 +207,7 @@ async def login(
         session,
         event_type=AuditEventType.LOGIN_SUCCEEDED,
         user_id=user.id,
-        actor_ip=client_ip,
+        actor_ip=peer,
     )
     await session.commit()
     return TokenPair(access_token=access, refresh_token=refresh)
