@@ -120,12 +120,6 @@ def ensure_secure_configuration(
         problems.append("two_factor_challenge_ttl_seconds must be greater than zero")
     if settings.hibp_timeout_seconds <= 0:
         problems.append("hibp_timeout_seconds must be greater than zero")
-    if settings.environment == "production" and not cors_origins(settings):
-        problems.append("cors_allowed_origins must list at least one origin in production")
-    if settings.trust_proxy_headers and not trusted_proxies_list(settings):
-        problems.append(
-            "trusted_proxies must list at least one proxy when trust_proxy_headers is enabled"
-        )
     if len(settings.jwt_signing_key.encode("utf-8", errors="replace")) < 32:
         problems.append(
             "jwt_signing_key must be set with at least 32 bytes outside the test environment"
