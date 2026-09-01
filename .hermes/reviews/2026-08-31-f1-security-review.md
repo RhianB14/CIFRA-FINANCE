@@ -93,3 +93,31 @@ A validação local consolidada executou `pnpm verify` com saída `verify-exit=0
 - Compose: `api`, `web`, `postgres`, `redis` e `minio` healthy após rebuild.
 - Smoke HTTP real: `SMOKE-OK` após downgrade base→upgrade head no banco dev.
 - Pre-commit: todos os 26 commits de remediação e o fix de compatibilidade do Compose pousaram após os hooks; o commit deste relatório também deve passar os mesmos hooks.
+
+---
+
+# Addendum — Segunda revisão corretiva (2026-09-01)
+
+O histórico acima está preservado integralmente; esta seção registra a segunda rodada de remediação autorizada (7 problemas), com commits RED→GREEN adicionais sobre `1bc8a8f` e head final documentado no relatório entregue no chat.
+
+## Problemas corrigidos na segunda revisão
+
+1. **Pepper de backup codes validado no startup** — `ensure_secure_configuration` agora rejeita pepper ausente, < 32 bytes, igual à chave JWT ou Fernet, e com marcadores de desenvolvimento em produção; validação de bytes (não caracteres); chaves numéricas (TOTP, TTLs, HIBP) verificadas no mesmo ponto.
+2. **Claim `sv` obrigatória e estrita** — access token exige `sv` int >= 1; bool e string rejeitados; fallback para 1 removido; refresh continua sem `sv`.
+3. **Usuário inativo bloqueado em todo o fluxo** — login indistinguível de credenciais inválidas; refresh 401 antes de criar sucessor ou revogar (banco intocado, provado); consumo de challenge 401; rotas 2FA bloqueadas via `get_current_user`.
+4. **Challenges 2FA vinculados** — payload JSON com `user_id`, `session_version` vigente, `purpose=login-2fa`, TTL 300 s, ID de 64 hex (32 bytes de entropia); consumo compara versão exata, exige usuário existente/ativo com TOTP habilitado; `GETDEL` atômico; payload corrompido 401; Redis fora 503.
+5. **HIBP 503 estável** — `HIBPUnavailableError` vira 503 com detail fixo; sem persistência de usuário ou tokens; `hibp_base_url` removida do Settings (endpoint oficial fixo, zero SSRF).
+6. **Janela TOTP simétrica** — varredura determinística de `current-drift` a `current+drift`; coluna órfã `totp_drift_seconds` removida de modelo e migração 0001 (ciclo up→down→up reprovado).
+7. **ADR 0005 e docs alinhados** — ADR reescrito (PostgreSQL autoritativo, Redis cache, igualdade exata de `sv`, ordem commit→publish, challenges, HMAC de backup codes, reautenticação no disable); README com 200 no login com 2FA e três secrets; `LoginRequest`/`TwoFactorRequired` removidos; `TwoFactorChallengeResponse` explícito; OpenAPI regenerado e drift check verde.
+
+## Evidências da segunda revisão
+
+- REDs confirmados: pepper (7 testes), `sv` (6), inativo (3), challenge (4), HIBP 503 (1), janela TOTP (3).
+- Suíte completa: `216 passed` (rodada verde; primeira rodada teve 4 falhas transientes de contenção de conexão, todas verdes isoladas e na rodada seguinte).
+- Cobertura: 90% total, 93% services/core.
+- Concorrência ×3: 6 passed em cada rodada.
+- `pnpm verify` exit 0 (216 testes, zero-comments, mypy strict, drift check, expo doctor 21/21).
+- `security:dependencies` exit 0 (2 moderações transitivas do Expo, sem patch, pré-existentes); trivy 0 vulnerabilidades/0 misconfig; pre-commit all-files 13/13.
+- Compose: config ok, build ok, 5 serviços healthy; container de API recusou arranque com `dev-only` pepper (prova do validador no ambiente real).
+- Smoke: SMOKE-OK; 2FA ponta a ponta no stack real (challenge 200 → consume 200 → reuse 401 → disable 200 → login 200 com tokens); challenge vivo com payload `{purpose, session_version, user_id}`; bump matou challenge pendente (401); HIBP real: senha vazada 422, HIBP fora 503 com 0 usuários persistidos; FLUSHALL do Redis: login/me/refresh 200 e versão repopulada (1); refresh de inativo: banco intocado.
+- Migração no banco dev: downgrade base → upgrade head ×2 com `totp_drift_seconds` ausente do schema final.
