@@ -48,6 +48,10 @@ def get_settings() -> Settings:
     return Settings()
 
 
+def cors_origins(settings: Settings) -> tuple[str, ...]:
+    return tuple(item.strip() for item in settings.cors_allowed_origins.split(",") if item.strip())
+
+
 def trusted_proxies_list(settings: Settings) -> tuple[str, ...]:
     return tuple(item.strip() for item in settings.trusted_proxies.split(",") if item.strip())
 
@@ -94,6 +98,8 @@ def ensure_secure_configuration(
         else exempt_environments
     )
     problems: list[str] = []
+    if settings.environment == "production" and not cors_origins(settings):
+        problems.append("cors_allowed_origins must list at least one origin in production")
     if settings.trust_proxy_headers and not trusted_proxies_list(settings):
         problems.append(
             "trusted_proxies must list at least one proxy when trust_proxy_headers is enabled"
@@ -114,6 +120,8 @@ def ensure_secure_configuration(
         problems.append("two_factor_challenge_ttl_seconds must be greater than zero")
     if settings.hibp_timeout_seconds <= 0:
         problems.append("hibp_timeout_seconds must be greater than zero")
+    if settings.environment == "production" and not cors_origins(settings):
+        problems.append("cors_allowed_origins must list at least one origin in production")
     if settings.trust_proxy_headers and not trusted_proxies_list(settings):
         problems.append(
             "trusted_proxies must list at least one proxy when trust_proxy_headers is enabled"
