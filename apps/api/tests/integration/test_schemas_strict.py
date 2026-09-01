@@ -80,7 +80,7 @@ class TestMassAssignment:
 
     async def test_challenge_rejects_unknown_fields(self, client: httpx.AsyncClient) -> None:
         response = await client.post(
-            "/auth/2fa/challenge", json={"challenge_id": "x", "totp": "000000", "admin": True}
+            "/auth/2fa/challenge", json={"challenge_id": "x", "code": "000000", "admin": True}
         )
         assert response.status_code == 422
         assert response.json()["detail"][0]["type"] == "extra_forbidden"
