@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 import redis.asyncio as redis
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,7 @@ from app.schemas.auth import (
     TwoFactorChallengeResponse,
     VerifyTwoFactorResponse,
 )
+from app.services.audit import AuditEventType, record_audit_event
 from app.services.auth import (
     AuthenticationError,
     EmailAlreadyRegisteredError,
@@ -137,12 +138,21 @@ async def register(
 
 @router.post("/login")
 async def login(
+    request: Request,
     form: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenPair | TwoFactorChallengeResponse:
+    client_ip = request.client.host if request.client is not None else None
     try:
         user = await authenticate_user(session, form.username, form.password)
     except AuthenticationError:
+        await record_audit_event(
+            session,
+            event_type=AuditEventType.LOGIN_FAILED,
+            actor_ip=client_ip,
+            after={"outcome": "invalid_credentials"},
+        )
+        await session.commit()
         raise _credentials_error("invalid credentials") from None
     if user.totp_enabled:
         try:
@@ -154,6 +164,13 @@ async def login(
             ) from None
         return TwoFactorChallengeResponse(challenge_id=challenge_id)
     access, refresh = await start_session(session, user)
+    await record_audit_event(
+        session,
+        event_type=AuditEventType.LOGIN_SUCCEEDED,
+        user_id=user.id,
+        actor_ip=client_ip,
+    )
+    await session.commit()
     return TokenPair(access_token=access, refresh_token=refresh)
 
 
@@ -238,8 +255,15 @@ async def two_factor_challenge(
     if user.session_version != data.session_version:
         raise _credentials_error("invalid or expired challenge")
     try:
-        await verify_second_factor(session, user, request.code)
+        await verify_second_factor(session, user, request.code, commit=False)
     except TwoFactorError:
+        await record_audit_event(
+            session,
+            event_type=AuditEventType.TWO_FACTOR_CHALLENGE_FAILED,
+            user_id=user.id,
+            after={"outcome": "invalid_second_factor"},
+        )
+        await session.commit()
         raise _credentials_error("invalid second factor code") from None
     access, refresh = await start_session(session, user)
     return TokenPair(access_token=access, refresh_token=refresh)
@@ -273,9 +297,16 @@ async def logout(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
     try:
-        await revoke_session(session, request.refresh_token)
+        revoked = await revoke_session(session, request.refresh_token)
     except (TokenNotFoundError, TokenValidationError):
         raise _credentials_error("refresh token is invalid") from None
+    if revoked is not None:
+        await record_audit_event(
+            session,
+            event_type=AuditEventType.LOGOUT_PERFORMED,
+            user_id=revoked.user_id,
+        )
+        await session.commit()
 
 
 @router.get("/me")
