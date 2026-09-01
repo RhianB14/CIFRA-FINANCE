@@ -1,6 +1,6 @@
 # Cifra
 
-Cifra é um controle financeiro pessoal com web em Next.js, aplicativo Android em Expo e API FastAPI. A F0 estabelece o monorepo, os serviços locais e os contratos mínimos de saúde, sem antecipar autenticação ou domínio financeiro.
+Cifra é um controle financeiro pessoal com web em Next.js, aplicativo Android em Expo e API FastAPI. A F0 estabelece o monorepo, os serviços locais e os contratos mínimos de saúde. A F1 adiciona autenticação multiusuário: JWT access/refresh com rotação e detecção de reutilização, Argon2id, 2FA por TOTP com backup codes e contexto de Row-Level Security.
 
 ## Pré-requisitos
 
@@ -66,7 +66,36 @@ cd apps/api
 uv run uvicorn app.main:app --reload
 uv run pytest -q
 uv run ruff check .
+pnpm --filter @cifra/api openapi:check
 ```
+
+## Autenticação
+
+Endpoints da F1, todos sob `/auth` (spec autoritativa em `docs/api/openapi.yaml`, servida em `/docs` pela API):
+
+| Endpoint | Função |
+|---|---|
+| `POST /auth/register` | Cria usuário e retorna par de tokens |
+| `POST /auth/login` | Retorna par de tokens; com 2FA ativo retorna `challenge_id` (200) |
+| `POST /auth/2fa/challenge` | Troca `challenge_id` + código TOTP/backup por tokens |
+| `POST /auth/refresh` | Rotaciona o refresh token; reuso de token revogado revoga a família |
+| `POST /auth/logout` | Revoga a sessão apresentada |
+| `GET /auth/me` | Dados do usuário autenticado (Bearer); rejeita contas desativadas (401) |
+| `POST /auth/2fa/setup` | Inicia enrollment TOTP (URI otpauth + QR) |
+| `POST /auth/2fa/verify` | Confirma o código e retorna backup codes de uso único |
+| `POST /auth/2fa/disable` | Desativa o 2FA (exige senha e código/backup válido) |
+
+Access token dura 15 minutos (HS256, claims `iss`, `aud`, `typ`, `jti`, `sub`, `sv` — inteiro estrito ≥ 1, sem valor padrão). Refresh dura 30 dias, é rotacionado a cada uso e só existe no banco como SHA-256. Reuso de refresh revogado revoga toda a família e invalida as sessões do usuário via versão de sessão durável no PostgreSQL publicada no Redis após o commit; a API responde 503 se o Redis estiver indisponível (fail-closed). Login de usuário inativo é indistinguível de credenciais inválidas e contas desativadas não autenticam, não rotacionam refresh e não consomem challenges. Senhas em Argon2id com rehash transparente no login; o registro consulta o HIBP k-anonymity quando `HIBP_ENABLED=true` e rejeita senhas vazadas; falha do HIBP com política fail-closed responde 503 sem persistir nada. Segredos TOTP são criptografados com Fernet (`TOTP_ENCRYPTION_KEY`) e os backup codes são HMAC-SHA256 com pepper independente (`BACKUP_CODE_PEPPER`); chave JWT, chave Fernet e pepper são validados no startup em tamanho, formato e independência mútua. A janela TOTP é simétrica (±1 janela por padrão, `TOTP_DRIFT_SECONDS // TOTP_PERIOD`) com antirreplay por passo. Desativar o 2FA exige senha e segundo fator. Ativar ou desativar o 2FA encerra as sessões anteriores. Rate limiting e account lockout ficam para a F1.5.
+
+Para gerar as chaves locais:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+As três variáveis são obrigatórias fora de ambiente de teste; a API recusa iniciar sem elas (`ENVIRONMENT` diferente de `test` exige chaves e pepper com tamanho e independência suficientes).
 
 ## Docker Compose
 

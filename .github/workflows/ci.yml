@@ -47,6 +47,7 @@ jobs:
       - run: pnpm format:check
       - run: pnpm zero-comments
       - run: pnpm zero-comments:test
+      - run: pnpm --filter @cifra/api openapi:check
       - run: pnpm run security:secrets:files
       - run: pnpm run security:secrets:history
       - run: pnpm typecheck
@@ -55,8 +56,39 @@ jobs:
     name: Test API
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cifra
+          POSTGRES_USER: cifra
+          POSTGRES_PASSWORD: cifra_local_development
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cifra -d cifra"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql+asyncpg://cifra:cifra_local_development@localhost:5432/cifra
+      REDIS_URL: redis://localhost:6379/15
+      ENVIRONMENT: test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: generate ephemeral test secrets
+        run: |
+          echo "JWT_SIGNING_KEY=ci-$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "TOTP_ENCRYPTION_KEY=$(python3 -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
           version: "11.24.0"
@@ -71,6 +103,14 @@ jobs:
           enable-cache: true
       - run: pnpm install --frozen-lockfile
       - run: uv sync --frozen
+        working-directory: apps/api
+      - name: apply migrations
+        run: uv run alembic upgrade head
+        working-directory: apps/api
+      - name: verify migrations downgrade and re-upgrade
+        run: |
+          uv run alembic downgrade base
+          uv run alembic upgrade head
         working-directory: apps/api
       - run: pnpm --filter @cifra/api test:coverage
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -129,5 +169,9 @@ jobs:
       - run: curl --fail http://localhost:18000/health/live
       - run: curl --fail http://localhost:18000/health/ready
       - run: curl --fail http://localhost:13000
+      - name: apply migrations
+        run: docker compose exec -T api uv run --no-sync alembic upgrade head
+      - name: auth smoke test
+        run: python3 scripts/auth_smoke.py
       - if: always()
         run: docker compose down

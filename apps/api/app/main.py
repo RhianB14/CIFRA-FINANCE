@@ -1,6 +1,19 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
+from app.core.settings import ensure_secure_configuration, get_settings
+from app.routers.auth import router as auth_router
 from app.routers.health import router as health_router
 
-app = FastAPI(title="Cifra API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    ensure_secure_configuration(get_settings())
+    yield
+
+
+app = FastAPI(title="Cifra API", version="0.2.0", lifespan=lifespan)
 app.include_router(health_router)
+app.include_router(auth_router)

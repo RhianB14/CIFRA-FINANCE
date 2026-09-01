@@ -18,7 +18,7 @@ Crie um ruleset para `main` com:
 
 ## Checks obrigatórios
 
-Selecione exatamente:
+Nomes confirmados por execução real no GitHub (PR #12, rodadas de CI e Security de 2026-08-30/31):
 
 - `Quality`;
 - `Test API`;
@@ -31,7 +31,7 @@ Selecione exatamente:
 - `Image Scan`;
 - `MinIO Image Scan`.
 
-Os nomes só podem ser confirmados após a primeira execução real no GitHub. Não selecione checks inexistentes antes disso.
+Nunca selecione checks inexistentes e reavalie esta lista sempre que um workflow mudar de nome.
 
 ## Dependabot e auto-merge
 

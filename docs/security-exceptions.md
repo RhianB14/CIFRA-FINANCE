@@ -68,13 +68,14 @@ Registro oficial das excecoes aplicadas aos scanners de vulnerabilidade. Toda ex
 | CVE-2026-54369 | HIGH | libacl |
 | CVE-2026-56852 | HIGH | golang.org/x/text |
 | CVE-2026-56853 | HIGH | stdlib |
+| CVE-2026-56854 | CRITICAL | golang.org/x/crypto |
 | CVE-2026-56858 | HIGH | stdlib |
 | CVE-2026-56859 | HIGH | stdlib |
 | CVE-2026-56860 | HIGH | stdlib |
 | CVE-2026-56862 | HIGH | stdlib |
 | GHSA-hrxh-6v49-42gf | HIGH | google.golang.org/grpc |
 
-Total: 54 excecoes ativas.
+Total: 55 excecoes ativas.
 
 ## Historico: excecoes da imagem web removidas nesta correcao
 
