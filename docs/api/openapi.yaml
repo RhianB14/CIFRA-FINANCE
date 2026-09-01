@@ -171,6 +171,19 @@ components:
       - refresh_token
       title: TokenPair
       type: object
+    TwoFactorChallengeResponse:
+      properties:
+        challenge_id:
+          title: Challenge Id
+          type: string
+        two_factor_required:
+          default: true
+          title: Two Factor Required
+          type: boolean
+      required:
+      - challenge_id
+      title: TwoFactorChallengeResponse
+      type: object
     ValidationError:
       properties:
         ctx:
@@ -341,8 +354,7 @@ paths:
               schema:
                 anyOf:
                 - $ref: '#/components/schemas/TokenPair'
-                - additionalProperties: true
-                  type: object
+                - $ref: '#/components/schemas/TwoFactorChallengeResponse'
                 title: Response Login Auth Login Post
           description: Successful Response
         '422':

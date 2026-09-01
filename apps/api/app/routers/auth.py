@@ -30,6 +30,7 @@ from app.schemas.auth import (
     RegisterRequest,
     SetupTwoFactorResponse,
     TokenPair,
+    TwoFactorChallengeResponse,
     VerifyTwoFactorResponse,
 )
 from app.services.auth import (
@@ -138,7 +139,7 @@ async def register(
 async def login(
     form: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> TokenPair | dict[str, object]:
+) -> TokenPair | TwoFactorChallengeResponse:
     try:
         user = await authenticate_user(session, form.username, form.password)
     except AuthenticationError:
@@ -149,9 +150,9 @@ async def login(
         except SessionStoreUnavailableError:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="session dependency unavailable",
+                detail="session store unavailable",
             ) from None
-        return {"challenge_id": challenge_id, "two_factor_required": True}
+        return TwoFactorChallengeResponse(challenge_id=challenge_id)
     access, refresh = await start_session(session, user)
     return TokenPair(access_token=access, refresh_token=refresh)
 

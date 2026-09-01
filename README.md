@@ -76,7 +76,7 @@ Endpoints da F1, todos sob `/auth` (spec autoritativa em `docs/api/openapi.yaml`
 | Endpoint | Função |
 |---|---|
 | `POST /auth/register` | Cria usuário e retorna par de tokens |
-| `POST /auth/login` | Retorna par de tokens; com 2FA ativo retorna `challenge_id` (202) |
+| `POST /auth/login` | Retorna par de tokens; com 2FA ativo retorna `challenge_id` (200) |
 | `POST /auth/2fa/challenge` | Troca `challenge_id` + código TOTP/backup por tokens |
 | `POST /auth/refresh` | Rotaciona o refresh token; reuso de token revogado revoga a família |
 | `POST /auth/logout` | Revoga a sessão apresentada |
@@ -85,16 +85,17 @@ Endpoints da F1, todos sob `/auth` (spec autoritativa em `docs/api/openapi.yaml`
 | `POST /auth/2fa/verify` | Confirma o código e retorna backup codes de uso único |
 | `POST /auth/2fa/disable` | Desativa o 2FA (exige senha e código/backup válido) |
 
-Access token dura 15 minutos (HS256, claims `iss`, `aud`, `typ`, `jti`, `sub`, `sv`). Refresh dura 30 dias, é rotacionado a cada uso e só existe no banco como SHA-256. Reuso de refresh revogado revoga toda a família e invalida as sessões do usuário via versão de sessão durável no banco publicada no Redis; a API responde 503 se o Redis estiver indisponível (fail-closed). Senhas em Argon2id com rehash transparente no login; o registro consulta o HIBP k-anonymity quando `HIBP_ENABLED=true` e rejeita senhas vazadas. Segredos TOTP são criptografados com Fernet (`TOTP_ENCRYPTION_KEY`, validada no startup) e os backup codes são HMAC-SHA256 com pepper independente (`BACKUP_CODE_PEPPER`). Desativar o 2FA exige senha e segundo fator. Ativar o 2FA encerra as sessões anteriores. Rate limiting e account lockout ficam para a F1.5.
+Access token dura 15 minutos (HS256, claims `iss`, `aud`, `typ`, `jti`, `sub`, `sv` — inteiro estrito ≥ 1, sem valor padrão). Refresh dura 30 dias, é rotacionado a cada uso e só existe no banco como SHA-256. Reuso de refresh revogado revoga toda a família e invalida as sessões do usuário via versão de sessão durável no PostgreSQL publicada no Redis após o commit; a API responde 503 se o Redis estiver indisponível (fail-closed). Login de usuário inativo é indistinguível de credenciais inválidas e contas desativadas não autenticam, não rotacionam refresh e não consomem challenges. Senhas em Argon2id com rehash transparente no login; o registro consulta o HIBP k-anonymity quando `HIBP_ENABLED=true` e rejeita senhas vazadas; falha do HIBP com política fail-closed responde 503 sem persistir nada. Segredos TOTP são criptografados com Fernet (`TOTP_ENCRYPTION_KEY`) e os backup codes são HMAC-SHA256 com pepper independente (`BACKUP_CODE_PEPPER`); chave JWT, chave Fernet e pepper são validados no startup em tamanho, formato e independência mútua. A janela TOTP é simétrica (±1 janela por padrão, `TOTP_DRIFT_SECONDS // TOTP_PERIOD`) com antirreplay por passo. Desativar o 2FA exige senha e segundo fator. Ativar ou desativar o 2FA encerra as sessões anteriores. Rate limiting e account lockout ficam para a F1.5.
 
 Para gerar as chaves locais:
 
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-As duas variáveis são obrigatórias fora de ambiente de teste; a API recusa iniciar sem elas (`ENVIRONMENT` diferente de `test` exige chaves com entropia suficiente).
+As três variáveis são obrigatórias fora de ambiente de teste; a API recusa iniciar sem elas (`ENVIRONMENT` diferente de `test` exige chaves e pepper com tamanho e independência suficientes).
 
 ## Docker Compose
 
