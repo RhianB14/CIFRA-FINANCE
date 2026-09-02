@@ -8,10 +8,12 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     MetaData,
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, validates
@@ -19,7 +21,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, validates
 NAMING_CONVENTION: dict[str, Any] = {
     "ix": "ix_%(table_name)s_%(column_0_N_name)s",
     "uq": "uq_%(table_name)s_%(column_0_N_name)s",
-    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "ck": "%(constraint_name)s",
     "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
     "pk": "pk_%(table_name)s",
 }
@@ -58,7 +60,7 @@ class User(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("email = lower(email)", name="email_normalized"),
+        CheckConstraint("email = lower(email)", name="ck_users_email_normalized"),
         UniqueConstraint("email", name="uq_users_email"),
     )
 
@@ -125,6 +127,11 @@ class Attachment(Base):
     etag: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    __table_args__ = (
+        CheckConstraint("size_bytes >= 0", name="ck_attachments_size_non_negative"),
+        Index("ix_attachments_account_id", "account_id"),
+    )
+
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"
@@ -154,8 +161,8 @@ class Account(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     currency: Mapped[str] = mapped_column(CHAR(3), nullable=False)
-    initial_balance_cents: Mapped[int] = mapped_column(nullable=False, default=0)
-    current_balance_cents: Mapped[int] = mapped_column(nullable=False, default=0)
+    initial_balance_cents: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    current_balance_cents: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     current_balance_version: Mapped[int] = mapped_column(nullable=False, default=0)
     archived_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -170,7 +177,7 @@ class Account(Base):
             "kind IN ('checking', 'savings', 'credit', 'cash', 'investment')",
             name="accounts_kind_allowed",
         ),
-        UniqueConstraint("user_id", "name", name="uq_accounts_user_id_name"),
+        Index("uq_accounts_user_id_name", "user_id", "name", unique=True),
     )
 
 
@@ -191,7 +198,7 @@ class Transaction(Base):
     status: Mapped[str] = mapped_column(
         String(10), nullable=False, default="posted", server_default="posted"
     )
-    amount_cents: Mapped[int] = mapped_column(nullable=False)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -203,8 +210,8 @@ class Transaction(Base):
         UUID(as_uuid=True), ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
     )
     transfer_group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    result_balance_after_cents: Mapped[int] = mapped_column(nullable=False, default=0)
-    result_balance_version: Mapped[int] = mapped_column(nullable=False, default=0)
+    result_balance_after_cents: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    result_balance_version: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
@@ -213,12 +220,24 @@ class Transaction(Base):
         CheckConstraint("amount_cents > 0", name="transactions_amount_positive"),
         CheckConstraint("kind IN ('credit', 'debit')", name="transactions_kind_allowed"),
         CheckConstraint(
-            "operation_type IN ('deposit', 'withdrawal', 'reversal')",
+            "operation_type IN ('deposit', 'withdrawal', 'reversal',"
+            " 'transfer_in', 'transfer_out')",
             name="transactions_operation_allowed",
         ),
         CheckConstraint("status IN ('pending', 'posted')", name="transactions_status_allowed"),
-        UniqueConstraint(
-            "account_id", "idempotency_key", name="uq_transactions_account_idempotency"
+        Index(
+            "uq_transactions_account_idempotency",
+            "account_id",
+            "idempotency_key",
+            unique=True,
+        ),
+        Index("ix_transactions_account_id_occurred_at", "account_id", "occurred_at"),
+        Index("ix_transactions_transfer_group_id", "transfer_group_id"),
+        Index(
+            "uq_transactions_reversal_of_id",
+            "reversal_of_id",
+            unique=True,
+            postgresql_where=text("reversal_of_id IS NOT NULL"),
         ),
     )
 
@@ -253,7 +272,7 @@ class Category(Base):
 
     __table_args__ = (
         CheckConstraint("kind IN ('income', 'expense')", name="categories_kind_allowed"),
-        UniqueConstraint("user_id", "name", name="uq_categories_user_id_name"),
+        Index("uq_categories_user_id_name", "user_id", "name", unique=True),
     )
 
 
@@ -269,7 +288,7 @@ class Tag(Base):
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
 
-    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_tags_user_id_name"),)
+    __table_args__ = (Index("uq_tags_user_id_name", "user_id", "name", unique=True),)
 
 
 class ImportBatch(Base):
@@ -293,7 +312,13 @@ class ImportBatch(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("user_id", "file_sha256", name="uq_import_batches_user_sha256"),
+        Index(
+            "uq_import_batches_user_account_sha256",
+            "user_id",
+            "account_id",
+            "file_sha256",
+            unique=True,
+        ),
     )
 
 
@@ -307,9 +332,9 @@ class AccountBalanceSnapshot(Base):
     account_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False
     )
-    reported_balance_cents: Mapped[int] = mapped_column(nullable=False)
-    ledger_balance_cents: Mapped[int] = mapped_column(nullable=False)
-    difference_cents: Mapped[int] = mapped_column(nullable=False)
+    reported_balance_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    ledger_balance_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    difference_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
