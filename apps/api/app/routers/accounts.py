@@ -118,6 +118,11 @@ async def update_account(
 ) -> AccountOut:
     await bind_current_user(session, user.id)
     account = await _owned_account(account_id, user.id, session)
+    if (
+        payload.expected_version is not None
+        and payload.expected_version != account.current_balance_version
+    ):
+        raise HTTPException(status_code=409, detail="stale version, reload and retry")
     if payload.name is not None:
         account.name = payload.name
     if payload.kind is not None:

@@ -20,6 +20,7 @@ class ReversalCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     idempotency_key: str = Field(min_length=1, max_length=255)
+    expected_version: int | None = Field(ge=0, default=None)
 
 
 class TransactionOut(BaseModel):

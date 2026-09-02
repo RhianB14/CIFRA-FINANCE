@@ -45,32 +45,28 @@ async def ol_client(db_session: AsyncSession) -> AsyncIterator[httpx.AsyncClient
     await engine.dispose()
 
 
-@pytest.mark.asyncio
-async def test_account_update_conflicts_on_stale_version(ol_client: httpx.AsyncClient) -> None:
-    created = await ol_client.post(
+async def _make_account_with_deposit(client: httpx.AsyncClient) -> tuple[str, str]:
+    created = await client.post(
         "/accounts",
         json={"name": "Conta OL", "kind": "checking", "currency": "BRL"},
     )
     assert created.status_code == 201, created.text
-    account = created.json()
-    account_id = account["id"]
-
-    stale = await ol_client.patch(
-        f"/accounts/{account_id}",
-        json={"name": "Renomeada", "expected_version": account["current_balance_version"]},
+    account_id = created.json()["id"]
+    deposit = await client.post(
+        f"/accounts/{account_id}/transactions",
+        json={
+            "idempotency_key": f"ol-dep-{uuid.uuid4().hex[:8]}",
+            "operation_type": "deposit",
+            "amount_cents": 10000,
+            "occurred_at": "2026-09-02T12:00:00Z",
+        },
     )
-    assert stale.status_code == 200, stale.text
-    assert stale.json()["name"] == "Renomeada"
-
-    replayed = await ol_client.patch(
-        f"/accounts/{account_id}",
-        json={"name": "Renomeada de novo", "expected_version": account["current_balance_version"]},
-    )
-    assert replayed.status_code == 409
+    assert deposit.status_code == 201, deposit.text
+    return account_id, deposit.json()["id"]
 
 
 @pytest.mark.asyncio
-async def test_account_update_without_expected_version_uses_fresh_version(
+async def test_account_patch_conflicts_on_stale_balance_version(
     ol_client: httpx.AsyncClient,
 ) -> None:
     created = await ol_client.post(
@@ -79,8 +75,41 @@ async def test_account_update_without_expected_version_uses_fresh_version(
     )
     assert created.status_code == 201
     account_id = created.json()["id"]
-    updated = await ol_client.patch(
+
+    stale = await ol_client.patch(
         f"/accounts/{account_id}",
-        json={"name": "Outro nome"},
+        json={"name": "Renomeada", "expected_version": 99},
     )
-    assert updated.status_code == 200, updated.text
+    assert stale.status_code == 409
+
+    fresh = await ol_client.patch(
+        f"/accounts/{account_id}",
+        json={"name": "Renomeada", "expected_version": 0},
+    )
+    assert fresh.status_code == 200, fresh.text
+    assert fresh.json()["name"] == "Renomeada"
+
+
+@pytest.mark.asyncio
+async def test_reversal_conflicts_on_stale_version_and_double_reversal(
+    ol_client: httpx.AsyncClient,
+) -> None:
+    account_id, deposit_id = await _make_account_with_deposit(ol_client)
+
+    stale = await ol_client.post(
+        f"/accounts/{account_id}/transactions/{deposit_id}/reversal",
+        json={"idempotency_key": f"ol-rev-{uuid.uuid4().hex[:8]}", "expected_version": 99},
+    )
+    assert stale.status_code == 409
+
+    first = await ol_client.post(
+        f"/accounts/{account_id}/transactions/{deposit_id}/reversal",
+        json={"idempotency_key": f"ol-rev-a-{uuid.uuid4().hex[:8]}", "expected_version": 1},
+    )
+    assert first.status_code == 201, first.text
+
+    double = await ol_client.post(
+        f"/accounts/{account_id}/transactions/{deposit_id}/reversal",
+        json={"idempotency_key": f"ol-rev-b-{uuid.uuid4().hex[:8]}", "expected_version": 2},
+    )
+    assert double.status_code == 409

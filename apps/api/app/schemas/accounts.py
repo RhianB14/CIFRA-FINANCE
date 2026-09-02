@@ -21,6 +21,7 @@ class AccountUpdate(BaseModel):
     name: str | None = Field(min_length=1, max_length=255, default=None)
     kind: str | None = None
     archived: bool | None = None
+    expected_version: int | None = Field(ge=0, default=None)
 
 
 class AccountOut(BaseModel):

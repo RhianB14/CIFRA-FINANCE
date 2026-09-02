@@ -105,10 +105,25 @@ async def reverse_transaction(
     session: DbSession,
 ) -> TransactionOut:
     await bind_current_user(session, user.id)
-    await _owned_account(account_id, user.id, session)
+    account = await _owned_account(account_id, user.id, session)
     original = await session.get(Transaction, transaction_id)
     if original is None or original.user_id != user.id or original.account_id != account_id:
         raise HTTPException(status_code=404, detail="transaction not found")
+    if (
+        payload.expected_version is not None
+        and payload.expected_version != account.current_balance_version
+    ):
+        raise HTTPException(status_code=409, detail="stale version, reload and retry")
+    if original.reversal_of_id is not None or original.operation_type == "reversal":
+        raise HTTPException(status_code=409, detail="transaction already reversed")
+    already = await session.execute(
+        select(Transaction.id).where(
+            Transaction.reversal_of_id == transaction_id,
+            Transaction.operation_type == "reversal",
+        )
+    )
+    if already.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=409, detail="transaction already reversed")
     try:
         result = await apply_ledger_movement(
             session,

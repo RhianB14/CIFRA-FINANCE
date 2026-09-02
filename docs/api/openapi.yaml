@@ -98,6 +98,12 @@ components:
           - type: boolean
           - type: 'null'
           title: Archived
+        expected_version:
+          anyOf:
+          - minimum: 0.0
+            type: integer
+          - type: 'null'
+          title: Expected Version
         kind:
           anyOf:
           - type: string
@@ -291,6 +297,12 @@ components:
     ReversalCreate:
       additionalProperties: false
       properties:
+        expected_version:
+          anyOf:
+          - minimum: 0.0
+            type: integer
+          - type: 'null'
+          title: Expected Version
         idempotency_key:
           maxLength: 255
           minLength: 1
