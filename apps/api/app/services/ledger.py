@@ -32,6 +32,14 @@ class IdempotencyConflictError(LedgerError):
     pass
 
 
+class DomainConflictError(LedgerError):
+    pass
+
+
+class StaleVersionError(LedgerError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class TransferResult:
     transfer_group_id: UUID
@@ -209,6 +217,111 @@ async def apply_transfer(
         out_transaction_id=out_row.id,
         in_transaction_id=in_row.id,
         amount_cents=amount_cents,
+    )
+
+
+async def apply_reversal(
+    session: AsyncSession,
+    account_id: UUID,
+    user_id: UUID,
+    transaction_id: UUID,
+    idempotency_key: str,
+    expected_version: int | None,
+) -> LedgerResult:
+    original = await session.get(Transaction, transaction_id)
+    if original is None or original.user_id != user_id or original.account_id != account_id:
+        raise LedgerError("original transaction not found for reversal")
+    if original.operation_type == "reversal" or original.reversal_of_id is not None:
+        raise DomainConflictError("transaction already reversed")
+
+    signature = _payload_signature(
+        "reversal",
+        original.amount_cents,
+        original.occurred_at,
+        None,
+        None,
+        None,
+        transaction_id,
+    )
+    replay = await _existing_result(session, account_id, idempotency_key, signature)
+    if replay is not None:
+        return replay
+
+    already = await session.execute(
+        select(Transaction.id).where(Transaction.reversal_of_id == transaction_id)
+    )
+    if already.scalar_one_or_none() is not None:
+        raise DomainConflictError("transaction already reversed")
+
+    locked_stmt = (
+        select(Account.current_balance_cents, Account.current_balance_version)
+        .where(Account.id == account_id)
+        .with_for_update()
+    )
+    if expected_version is not None:
+        locked_stmt = locked_stmt.where(Account.current_balance_version == expected_version)
+    locked = (await session.execute(locked_stmt)).one_or_none()
+    if locked is None:
+        if expected_version is None:
+            raise LedgerError("account not found for owner")
+        raise StaleVersionError("stale balance version, reload and retry")
+
+    recheck = await session.execute(
+        select(Transaction.id).where(Transaction.reversal_of_id == transaction_id)
+    )
+    if recheck.scalar_one_or_none() is not None:
+        raise DomainConflictError("transaction already reversed")
+
+    kind = "debit" if original.kind == "credit" else "credit"
+    delta = original.amount_cents if kind == "credit" else -original.amount_cents
+    balance_after = locked.current_balance_cents + delta
+    version_after = locked.current_balance_version + 1
+
+    insert_stmt = (
+        pg_insert(Transaction)
+        .values(
+            user_id=user_id,
+            account_id=account_id,
+            idempotency_key=idempotency_key,
+            payload_signature=signature,
+            kind=kind,
+            operation_type="reversal",
+            status="posted",
+            amount_cents=original.amount_cents,
+            occurred_at=original.occurred_at,
+            reversal_of_id=transaction_id,
+            result_balance_after_cents=balance_after,
+            result_balance_version=version_after,
+        )
+        .on_conflict_do_nothing()
+        .returning(Transaction.id)
+    )
+    inserted = (await session.execute(insert_stmt)).first()
+    if inserted is None:
+        replay_after_race = await _existing_result(session, account_id, idempotency_key, signature)
+        if replay_after_race is not None:
+            return replay_after_race
+        raise DomainConflictError("transaction already reversed")
+
+    await session.execute(
+        update(Account)
+        .where(Account.id == account_id)
+        .values(
+            current_balance_cents=balance_after,
+            current_balance_version=version_after,
+            updated_at=func.now(),
+        )
+    )
+
+    return LedgerResult(
+        transaction_id=inserted.id,
+        account_id=account_id,
+        kind=kind,
+        amount_cents=original.amount_cents,
+        balance_after_cents=balance_after,
+        balance_version=version_after,
+        created=True,
+        reversal_of_id=transaction_id,
     )
 
 
