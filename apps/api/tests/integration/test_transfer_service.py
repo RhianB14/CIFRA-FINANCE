@@ -17,7 +17,7 @@ async def _seed_two_accounts(db_session: AsyncSession) -> tuple[uuid.UUID, uuid.
     )
     account_a = uuid.uuid4()
     account_b = uuid.uuid4()
-    for account_id, name in ((account_a, "Conta A"), (account_b, "Conta B")):
+    for account_id, name, initial in ((account_a, "Conta A", 100000), (account_b, "Conta B", 0)):
         await db_session.execute(
             text(
                 "INSERT INTO accounts (id, user_id, name, kind, currency,"
@@ -25,7 +25,7 @@ async def _seed_two_accounts(db_session: AsyncSession) -> tuple[uuid.UUID, uuid.
                 " VALUES (:id, :user_id, :name, 'checking', 'BRL',"
                 " :initial, :initial, 0)"
             ),
-            {"id": account_id, "user_id": user_id, "name": name, "initial": 0},
+            {"id": account_id, "user_id": user_id, "name": name, "initial": initial},
         )
     await db_session.commit()
     return user_id, account_a, account_b

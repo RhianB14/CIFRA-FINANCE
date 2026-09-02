@@ -1,5 +1,6 @@
 import hashlib
 import json
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -48,7 +49,132 @@ async def apply_transfer(
     amount_cents: int,
     occurred_at: datetime,
 ) -> TransferResult:
-    raise NotImplementedError
+    if amount_cents <= 0:
+        raise LedgerError("amount must be positive")
+    if from_account_id == to_account_id:
+        raise LedgerError("transfer requires distinct accounts")
+
+    from_account = await session.get(Account, from_account_id)
+    to_account = await session.get(Account, to_account_id)
+    if from_account is None or from_account.user_id != user_id:
+        raise LedgerError("source account not found for owner")
+    if to_account is None or to_account.user_id != user_id:
+        raise LedgerError("destination account not found for owner")
+
+    signature = _payload_signature(
+        "transfer",
+        amount_cents,
+        occurred_at,
+        None,
+        None,
+        f"{from_account_id}:{to_account_id}",
+        None,
+    )
+
+    existing_out = await session.execute(
+        select(Transaction).where(
+            Transaction.account_id == from_account_id,
+            Transaction.idempotency_key == idempotency_key,
+        )
+    )
+    replay_leg = existing_out.scalar_one_or_none()
+    if replay_leg is not None:
+        if replay_leg.payload_signature != signature:
+            raise IdempotencyConflictError("idempotency key reused with different payload")
+        group_id = replay_leg.transfer_group_id
+        if group_id is None:
+            raise LedgerError("stored transfer leg missing group id")
+        in_leg = await session.execute(
+            select(Transaction).where(
+                Transaction.transfer_group_id == group_id,
+                Transaction.operation_type == "transfer_in",
+            )
+        )
+        in_leg_row = in_leg.scalar_one()
+        return TransferResult(
+            transfer_group_id=group_id,
+            out_transaction_id=replay_leg.id,
+            in_transaction_id=in_leg_row.id,
+            amount_cents=amount_cents,
+        )
+
+    group_id = uuid.uuid4()
+    out_stmt = (
+        pg_insert(Transaction)
+        .values(
+            user_id=user_id,
+            account_id=from_account_id,
+            idempotency_key=idempotency_key,
+            payload_signature=signature,
+            kind="debit",
+            operation_type="transfer_out",
+            status="posted",
+            amount_cents=amount_cents,
+            occurred_at=occurred_at,
+            transfer_group_id=group_id,
+        )
+        .on_conflict_do_nothing(
+            index_elements=[Transaction.account_id, Transaction.idempotency_key]
+        )
+        .returning(Transaction.id)
+    )
+    out_row = (await session.execute(out_stmt)).first()
+    if out_row is None:
+        raise IdempotencyConflictError("idempotency key reused with different payload")
+    in_stmt = (
+        pg_insert(Transaction)
+        .values(
+            user_id=user_id,
+            account_id=to_account_id,
+            idempotency_key=f"{idempotency_key}:in",
+            payload_signature=signature,
+            kind="credit",
+            operation_type="transfer_in",
+            status="posted",
+            amount_cents=amount_cents,
+            occurred_at=occurred_at,
+            transfer_group_id=group_id,
+        )
+        .on_conflict_do_nothing(
+            index_elements=[Transaction.account_id, Transaction.idempotency_key]
+        )
+        .returning(Transaction.id)
+    )
+    in_row = (await session.execute(in_stmt)).first()
+    if in_row is None:
+        raise LedgerError("unable to persist transfer destination leg")
+
+    out_balance = await session.execute(
+        update(Account)
+        .where(Account.id == from_account_id)
+        .values(
+            current_balance_cents=Account.current_balance_cents - amount_cents,
+            current_balance_version=Account.current_balance_version + 1,
+            updated_at=func.now(),
+        )
+        .returning(Account.current_balance_version)
+    )
+    if out_balance.scalar_one_or_none() is None:
+        raise LedgerError("source account balance update failed")
+    in_balance = await session.execute(
+        update(Account)
+        .where(Account.id == to_account_id)
+        .values(
+            current_balance_cents=Account.current_balance_cents + amount_cents,
+            current_balance_version=Account.current_balance_version + 1,
+            updated_at=func.now(),
+        )
+        .returning(Account.current_balance_version)
+    )
+    if in_balance.scalar_one_or_none() is None:
+        raise LedgerError("destination account balance update failed")
+
+    return TransferResult(
+        transfer_group_id=group_id,
+        out_transaction_id=out_row.id,
+        in_transaction_id=in_row.id,
+        amount_cents=amount_cents,
+    )
 
 
 _ALLOWED_OPERATIONS = ("deposit", "withdrawal", "reversal")
