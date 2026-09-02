@@ -218,17 +218,13 @@ async def materialize_recurring(
                 break
             idempotency_key = f"recurring:{row.id}:{occurrence.isoformat()}"
             signature = _recurring_signature(row, occurrence)
-            try:
-                outcome = await _materialize_occurrence(
-                    session,
-                    recurring=row,
-                    occurrence=occurrence,
-                    idempotency_key=idempotency_key,
-                    signature=signature,
-                )
-            except IdempotencyConflictError:
-                replayed += 0
-                raise
+            outcome = await _materialize_occurrence(
+                session,
+                recurring=row,
+                occurrence=occurrence,
+                idempotency_key=idempotency_key,
+                signature=signature,
+            )
             if outcome:
                 created += 1
             else:
