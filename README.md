@@ -139,7 +139,7 @@ Recorrências (`recurring_transactions`, migração 0012) têm CRUD completo em 
 | `GET /dashboard/summary?month=YYYY-MM` | Saldos consolidados **por moeda** (posted e projetado), fluxo do mês, saldos por conta, próximos agendados e últimos lançamentos |
 | `GET /dashboard/evolution?months=N&until=YYYY-MM` | Série de evolução mensal por moeda (entradas, saídas, saldo final acumulado) |
 | `GET /dashboard/month-comparison?month=YYYY-MM` | Comparativo mês atual vs anterior por moeda, com deltas |
-| `POST /recurring` / `GET /recurring` / `GET /recurring/{id}` / `PATCH /recurring/{id}` / `DELETE /recurring/{id}` | CRUD de recorrências (RLS, isolado por usuário) |
+| `POST /recurring-transactions` / `GET /recurring-transactions` / `GET /recurring-transactions/{id}` / `PATCH /recurring-transactions/{id}` / `DELETE /recurring-transactions/{id}` | CRUD de recorrências (RLS, isolado por usuário) |
 
 O dashboard web (`/dashboard`) renderiza saldos por moeda (nunca somados), fluxo do mês, contas, próximos agendados, últimos lançamentos, gráfico de evolução e comparativo (Recharts), com estados de loading, vazio e erro, acessibilidade e formatação `pt-BR`. Smoke E2E da fase: `scripts/f3_smoke.py` (agendado pendente, promoção, recorrência dia 5, dashboard por moeda).
 

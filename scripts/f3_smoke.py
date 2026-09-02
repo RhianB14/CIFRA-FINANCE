@@ -61,18 +61,19 @@ async def main() -> None:
         assert scheduled.json()["status"] == "pending", scheduled.text
 
         balance = await http.get(f"/accounts/{account_id}/balance", headers=headers)
-        projected = await http.get(f"/accounts/{account_id}/balance/projected", headers=headers)
         assert balance.json()["current_balance_cents"] == 130000, balance.text
+        projected = await http.get(
+            f"/accounts/{account_id}/balance?projected=true", headers=headers
+        )
         assert projected.json()["projected_balance_cents"] == 125000, projected.text
 
         recurring = await http.post(
-            "/recurring",
+            "/recurring-transactions",
             json={
                 "account_id": account_id,
-                "operation_type": "deposit",
-                "amount_cents": 1000,
-                "cadence": "monthly",
-                "day_of_month": 5,
+                "template_operation_type": "deposit",
+                "template_amount_cents": 1000,
+                "recurrence": "monthly",
                 "starts_on": "2026-06-05",
                 "ends_on": "2026-08-31",
             },
