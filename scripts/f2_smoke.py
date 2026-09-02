@@ -38,13 +38,35 @@ async def main() -> None:
 
         deposit = await http.post(
             f"/accounts/{a_id}/transactions",
-            json={"idempotency_key": f"smoke-dep-{suffix}", "operation_type": "deposit", "amount_cents": 50000, "description": "dep"},
+            json={
+                "idempotency_key": f"smoke-dep-{suffix}",
+                "operation_type": "deposit",
+                "amount_cents": 50000,
+                "description": "dep",
+                "occurred_at": "2026-09-02T12:00:00Z",
+            },
             headers=headers,
         )
         assert deposit.status_code == 201, deposit.text
+        withdrawal = await http.post(
+            f"/accounts/{a_id}/transactions",
+            json={
+                "idempotency_key": f"smoke-wd-{suffix}",
+                "operation_type": "withdrawal",
+                "amount_cents": 12000,
+                "description": "wd",
+                "occurred_at": "2026-09-02T12:05:00Z",
+            },
+            headers=headers,
+        )
+        assert withdrawal.status_code == 201, withdrawal.text
         transfer = await http.post(
             f"/accounts/{a_id}/transactions/transfers",
-            json={"idempotency_key": f"smoke-tr-{suffix}", "amount_cents": 32000, "target_account_id": b_id},
+            json={
+                "idempotency_key": f"smoke-tr-{suffix}",
+                "amount_cents": 20000,
+                "target_account_id": b_id,
+            },
             headers=headers,
         )
         assert transfer.status_code == 201, transfer.text
