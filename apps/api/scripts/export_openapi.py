@@ -33,7 +33,7 @@ def _quote_hash_leading_values(yaml_text: str) -> str:
 
 def dumps_spec(spec: dict[str, object]) -> str:
     raw = yaml.safe_dump(spec, sort_keys=True, default_flow_style=False, allow_unicode=True)
-    return _quote_hash_leading_values(raw)
+    return _quote_hash_leading_values(raw) + "\n"
 
 
 def main() -> int:
