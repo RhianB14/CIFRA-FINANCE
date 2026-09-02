@@ -14,6 +14,7 @@ from app.core.totp import (
     verify_totp,
 )
 from app.models import BackupCode, User
+from app.services.audit import AuditEventType, record_audit_event
 from app.services.rotation import revoke_all_refresh_tokens
 from app.services.session_revocation import bump_session_version
 
@@ -89,6 +90,15 @@ async def confirm_totp(session: AsyncSession, user: User, code: str) -> list[str
     user.totp_confirmed_at = datetime.now(UTC)
     await revoke_all_refresh_tokens(session, user.id)
     user.session_version = await bump_session_version(session, user.id)
+    await record_audit_event(
+        session,
+        event_type=AuditEventType.TWO_FACTOR_ACTIVATED,
+        user_id=user.id,
+        entity_type="user",
+        entity_id=user.id,
+        before={"totp_enabled": False},
+        after={"totp_enabled": True},
+    )
     await session.flush()
     return codes
 
@@ -106,6 +116,17 @@ async def verify_second_factor(
         raise TwoFactorNotEnabledError("two factor secret is missing")
     if _is_backup_code(code):
         if await _consume_backup_code(session, user, code, commit):
+            await record_audit_event(
+                session,
+                event_type=AuditEventType.BACKUP_CODE_USED,
+                user_id=user.id,
+                entity_type="backup_code",
+                after={"remaining": "not_disclosed"},
+            )
+            if commit:
+                await session.commit()
+            else:
+                await session.flush()
             return
         raise TwoFactorError("backup code is invalid or already used")
     seed = decrypt_secret(sealed)
@@ -138,6 +159,15 @@ async def disable_totp(
     user.totp_pending_secret_encrypted = None
     user.totp_last_step = None
     user.totp_confirmed_at = None
+    await record_audit_event(
+        session,
+        event_type=AuditEventType.TWO_FACTOR_DEACTIVATED,
+        user_id=user.id,
+        entity_type="user",
+        entity_id=user.id,
+        before={"totp_enabled": True},
+        after={"totp_enabled": False},
+    )
     await session.flush()
 
 

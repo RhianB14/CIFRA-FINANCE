@@ -110,3 +110,65 @@ jobs:
           exit-code: "1"
           ignore-unfixed: false
           trivyignores: ".trivyignore-minio"
+
+  zap-baseline:
+    name: ZAP Baseline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - run: docker compose up -d --wait --wait-timeout 300
+      - name: apply migrations
+        run: docker compose exec -T api uv run --no-sync alembic upgrade head
+      - name: wait for web
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if curl --fail --silent --output /dev/null http://localhost:13000; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "web never answered"
+          exit 1
+      - name: guard scan target
+        run: |
+          count=$(curl --silent http://localhost:13000 | grep -c -i "cifra" || true)
+          if [ "$count" -eq 0 ]; then
+            echo "scan target returned empty content; refusing to scan zero urls"
+            exit 1
+          fi
+      - name: run zap baseline
+        run: >
+          docker run --rm --network host
+          -v "$PWD/docs/zap:/zap/wrk:rw"
+          -u 0
+          ghcr.io/zaproxy/zaproxy@sha256:71db37cd5b75663b35758d10aaec05bf6fbac23f5020e3046c70e628a5f84efa
+          zap-baseline.py -t http://localhost:13000 -r report.html -J report.json
+          -I
+      - name: enforce minimum scanned urls and high findings
+        run: python3 scripts/zap_gate.py docs/zap/report.json
+      - name: upload zap report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: zap-baseline-report
+          path: |
+            docs/zap/report.html
+            docs/zap/report.json
+          retention-days: 14
+      - if: always()
+        run: docker compose down
+
+  scope-isolation:
+    name: Scope Isolation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - run: docker compose up -d --wait --wait-timeout 300
+      - name: apply migrations
+        run: docker compose exec -T api uv run --no-sync alembic upgrade head
+      - name: run scope isolation probe
+        run: python3 scripts/scope_isolation.py ci
+      - if: always()
+        run: docker compose down

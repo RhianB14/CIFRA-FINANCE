@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.settings import get_settings
 from app.core.tokens import create_refresh_token, decode_refresh_token
 from app.models import RefreshToken, User
+from app.services.audit import AuditEventType, record_audit_event
 from app.services.session_revocation import (
     bump_session_version,
     publish_session_version,
@@ -113,6 +114,14 @@ async def rotate_refresh_token(
     except ReuseDetectedError:
         await revoke_all_refresh_tokens(session, user_id)
         session_version = await bump_session_version(session, user_id)
+        await record_audit_event(
+            session,
+            event_type=AuditEventType.REFRESH_REUSE_DETECTED,
+            user_id=user_id,
+            entity_type="refresh_token",
+            entity_id=row.id,
+            after={"family_revoked": True, "session_version": session_version},
+        )
         await session.commit()
         await publish_session_version(user_id, session_version, client=redis_client)
         raise
@@ -133,10 +142,12 @@ async def revoke_session(
     session: AsyncSession,
     refresh_token: str,
     redis_client: RedisLike | None = None,
-) -> None:
+) -> RefreshToken | None:
     payload = decode_refresh_token(refresh_token)
     jti_hash = hash_jti(str(payload["jti"]))
     row = await _load_token(session, jti_hash)
     if row.revoked_at is None:
         row.revoked_at = datetime.now(UTC)
         await session.commit()
+        return row
+    return None

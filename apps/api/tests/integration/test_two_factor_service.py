@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_secret
+from app.core.db import bind_current_user
 from app.core.passwords import hash_password
 from app.models import BackupCode, User
 from app.services.two_factor import (
@@ -28,6 +29,7 @@ async def make_user(session: AsyncSession) -> User:
     )
     session.add(user)
     await session.commit()
+    await bind_current_user(session, user.id)
     return user
 
 

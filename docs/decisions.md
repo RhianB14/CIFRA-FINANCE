@@ -68,6 +68,20 @@ Vários candidatos nominais (`cifra` em variações de TLD) estão registrados e
 - [x] Criar conta Resend (29/08 — remetente de teste padrão do provedor em dev)
 - [ ] Comprar domínio no registro.br (adiado pelo usuário; não bloqueia até F1.5)
 
+### Revisão de 2026-09-01 (execução da F1.5)
+
+A F1.5 (branch `feat/f1.5-security`) registrou as seguintes decisões de implementação:
+
+- **Rate limit**: janela fixa no Redis via Lua atômico; `/auth/register` 3/min e `/auth/login` 5/min por identidade (IP com lista de proxies confiáveis opcional); 429 com `Retry-After`; fail-open quando o Redis está indisponível (disponibilidade de autenticação prevalece). A instrução do plano (SlowAPI) foi substituída por implementação própria atômica para manter contagem exata sob concorrência.
+- **Lockout**: 5 falhas × 15 minutos com backoff exponencial, chaves `cifra:lock:*`; resposta indistinguível do login inválido; fail-open amplo.
+- **Auditoria**: eventos tipados (`AuditEventType`) com sanitização de payload — chaves sensíveis mantêm a estrutura com valor `[REDACTED]`; append-only garantido por trigger no banco e policies RLS (migração 0002).
+- **RLS**: role dedicada `cifra_app` NOLOGIN NOBYPASSRLS via `server_settings` do engine; escopo do usuário re-aplicado a cada transação por evento `after_begin`; fluxos pré-auth usam bypass explícito. O `get_current_user` publica o escopo antes de consultar o usuário e validar a versão de sessão (ordem é parte do contrato RLS, coberta por teste dedicado sob role real).
+- **CORS**: whitelist estrita via `CORS_ALLOWED_ORIGINS`, métodos GET/POST, validação fail-closed no startup fora de teste.
+- **Schemas**: `extra="forbid"` em todos os models de request (anti mass assignment).
+- **Recuperação de senha**: token de 32 bytes, hash SHA-256 no Redis (TTL 15 min), consumo único por `GETDEL`; entrega via Resend opt-in (`PASSWORD_RESET_RESEND_ENABLED`); remetente de teste do provedor em dev até a compra do domínio (decisão #6 permanece adiada); respostas indistinguíveis para e-mail conhecido/desconhecido; reset concluído revoga refresh tokens e bumpa a versão de sessão.
+- **Headers web**: CSP sem `unsafe-eval` e sem `unsafe-inline` (styles incluídos), HSTS 2 anos com `includeSubDomains; preload`, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy` mínima; build e hidratação Next.js validados.
+- **ZAP no CI**: imagem do ZAP fixada por digest imutável (não por tag); gate bloqueia findings High e falha se zero URLs examinadas; relatório preservado como artifact; `ZAP Baseline` e `Scope Isolation` entram como jobs do workflow Security sem alterar required checks remotamente nesta execução.
+
 ## Fechamento da F0 — 2026-08-29
 
 - Monorepo pnpm + Turborepo criado com API, web, mobile e três pacotes compartilhados.

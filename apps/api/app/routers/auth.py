@@ -5,13 +5,15 @@ from dataclasses import dataclass
 from typing import Annotated
 
 import redis.asyncio as redis
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db import bind_current_user, get_session
+from app.core.db import bind_current_user, get_session, set_bypass_scope
+from app.core.emails import normalize_email
 from app.core.hibp import HIBPUnavailableError
+from app.core.ratelimit import RateLimitExceeded, check_rate_limit, client_ip
 from app.core.settings import get_settings
 from app.core.tokens import (
     TokenValidationError,
@@ -26,6 +28,8 @@ from app.schemas.auth import (
     ConfirmTwoFactorRequest,
     DisableTwoFactorRequest,
     MeResponse,
+    PasswordRecoveryRequest,
+    PasswordResetRequest,
     RefreshRequest,
     RegisterRequest,
     SetupTwoFactorResponse,
@@ -33,12 +37,24 @@ from app.schemas.auth import (
     TwoFactorChallengeResponse,
     VerifyTwoFactorResponse,
 )
+from app.services import lockout
+from app.services.audit import AuditEventType, record_audit_event
 from app.services.auth import (
     AuthenticationError,
     EmailAlreadyRegisteredError,
     authenticate_user,
+    get_user_by_email,
     register_user,
     start_session,
+)
+from app.services.mailer import Mailer, MailerError, get_mailer
+from app.services.password_reset import (
+    ResetStoreUnavailableError,
+    ResetTokenInvalidError,
+    issue_reset_token,
+)
+from app.services.password_reset import (
+    reset_password as reset_password_service,
 )
 from app.services.rotation import (
     ReuseDetectedError,
@@ -64,6 +80,12 @@ from app.services.two_factor import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 oauth2 = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
+REGISTER_RATE_LIMIT = 3
+LOGIN_RATE_LIMIT = 5
+PASSWORD_RECOVERY_RATE_LIMIT = 3
+RATE_LIMIT_WINDOW_SECONDS = 60
+RECOVERY_WINDOW_SECONDS = 3600
+
 
 def _credentials_error(detail: str) -> HTTPException:
     return HTTPException(
@@ -71,6 +93,43 @@ def _credentials_error(detail: str) -> HTTPException:
         detail=detail,
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+def _rate_limit_error(retry_after: int) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail="too many requests",
+        headers={"Retry-After": str(max(1, retry_after))},
+    )
+
+
+async def _enforce_rate_limit(
+    request: Request,
+    bucket: str,
+    limit: int,
+    window_seconds: int = RATE_LIMIT_WINDOW_SECONDS,
+) -> None:
+    settings = get_settings()
+    peer = request.client.host if request.client is not None else None
+    forwarded = request.headers.get("x-forwarded-for")
+    identity = client_ip(peer, forwarded, settings)
+    store = redis.from_url(settings.redis_url, decode_responses=True)
+    try:
+        await check_rate_limit(
+            store,
+            f"cifra:ratelimit:{bucket}:{identity}",
+            limit,
+            window_seconds,
+        )
+    except RateLimitExceeded as error:
+        raise _rate_limit_error(error.retry_after) from None
+    finally:
+        await store.aclose()
+
+
+def reset_store() -> redis.Redis:
+    settings = get_settings()
+    return redis.from_url(settings.redis_url, decode_responses=True)
 
 
 async def get_current_user(
@@ -88,6 +147,12 @@ async def get_current_user(
     if isinstance(session_version_value, bool) or not isinstance(session_version_value, int):
         raise _credentials_error("invalid access token")
     session_version = session_version_value
+    await bind_current_user(session, user_id)
+    user = await session.get(User, user_id)
+    if user is None:
+        raise _credentials_error("unknown user")
+    if not user.is_active:
+        raise _credentials_error("account is inactive")
     try:
         if await session_invalid(session, user_id, session_version):
             raise _credentials_error("session has been revoked")
@@ -96,20 +161,17 @@ async def get_current_user(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="session dependency unavailable",
         ) from None
-    user = await session.get(User, user_id)
-    if user is None:
-        raise _credentials_error("unknown user")
-    if not user.is_active:
-        raise _credentials_error("account is inactive")
-    await bind_current_user(session, user_id)
     return user
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(
     request: RegisterRequest,
+    http_request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenPair:
+    await _enforce_rate_limit(http_request, "register", REGISTER_RATE_LIMIT)
+    await set_bypass_scope(session)
     try:
         _, access, refresh = await register_user(
             session, request.email, request.password, request.name
@@ -137,13 +199,32 @@ async def register(
 
 @router.post("/login")
 async def login(
+    request: Request,
     form: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenPair | TwoFactorChallengeResponse:
+    await _enforce_rate_limit(request, "login", LOGIN_RATE_LIMIT)
+    await set_bypass_scope(session)
+    peer = request.client.host if request.client is not None else None
+    identity = normalize_email(form.username)
+    if await lockout.is_locked(identity):
+        raise _credentials_error("invalid credentials") from None
     try:
         user = await authenticate_user(session, form.username, form.password)
     except AuthenticationError:
+        failures = await lockout.register_failure(identity)
+        locked_now = failures is not None and failures >= lockout.MAX_FAILURES
+        if locked_now:
+            await lockout.apply_lock(identity)
+        await record_audit_event(
+            session,
+            event_type=AuditEventType.LOGIN_FAILED,
+            actor_ip=peer,
+            after={"outcome": "invalid_credentials", "account_locked": locked_now},
+        )
+        await session.commit()
         raise _credentials_error("invalid credentials") from None
+    await lockout.reset_failures(identity)
     if user.totp_enabled:
         try:
             challenge_id = await _create_challenge(session, user)
@@ -154,6 +235,13 @@ async def login(
             ) from None
         return TwoFactorChallengeResponse(challenge_id=challenge_id)
     access, refresh = await start_session(session, user)
+    await record_audit_event(
+        session,
+        event_type=AuditEventType.LOGIN_SUCCEEDED,
+        user_id=user.id,
+        actor_ip=peer,
+    )
+    await session.commit()
     return TokenPair(access_token=access, refresh_token=refresh)
 
 
@@ -223,6 +311,7 @@ async def two_factor_challenge(
     request: ChallengeRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenPair:
+    await set_bypass_scope(session)
     try:
         data = await _consume_challenge(request.challenge_id)
     except SessionStoreUnavailableError:
@@ -238,8 +327,15 @@ async def two_factor_challenge(
     if user.session_version != data.session_version:
         raise _credentials_error("invalid or expired challenge")
     try:
-        await verify_second_factor(session, user, request.code)
+        await verify_second_factor(session, user, request.code, commit=False)
     except TwoFactorError:
+        await record_audit_event(
+            session,
+            event_type=AuditEventType.TWO_FACTOR_CHALLENGE_FAILED,
+            user_id=user.id,
+            after={"outcome": "invalid_second_factor"},
+        )
+        await session.commit()
         raise _credentials_error("invalid second factor code") from None
     access, refresh = await start_session(session, user)
     return TokenPair(access_token=access, refresh_token=refresh)
@@ -250,6 +346,7 @@ async def refresh(
     request: RefreshRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> TokenPair:
+    await set_bypass_scope(session)
     try:
         new_refresh_jwt, _ = await rotate_refresh_token(session, request.refresh_token)
     except SessionStoreUnavailableError:
@@ -272,10 +369,99 @@ async def logout(
     request: RefreshRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
+    await set_bypass_scope(session)
     try:
-        await revoke_session(session, request.refresh_token)
+        revoked = await revoke_session(session, request.refresh_token)
     except (TokenNotFoundError, TokenValidationError):
         raise _credentials_error("refresh token is invalid") from None
+    if revoked is not None:
+        await record_audit_event(
+            session,
+            event_type=AuditEventType.LOGOUT_PERFORMED,
+            user_id=revoked.user_id,
+        )
+        await session.commit()
+
+
+@router.post("/password-recovery", status_code=status.HTTP_200_OK)
+async def password_recovery(
+    request: PasswordRecoveryRequest,
+    http_request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    mailer: Annotated[Mailer, Depends(get_mailer)],
+) -> dict[str, str]:
+    await _enforce_rate_limit(
+        http_request,
+        "recovery",
+        PASSWORD_RECOVERY_RATE_LIMIT,
+        RECOVERY_WINDOW_SECONDS,
+    )
+    await set_bypass_scope(session)
+    peer = http_request.client.host if http_request.client is not None else None
+    try:
+        user = await get_user_by_email(session, request.email)
+        if user is not None and user.is_active:
+            token = await issue_reset_token(reset_store(), user.id)
+            try:
+                await mailer.send_password_reset(user.email, token)
+            except MailerError:
+                await record_audit_event(
+                    session,
+                    event_type=AuditEventType.PASSWORD_RESET_REQUESTED,
+                    user_id=user.id,
+                    actor_ip=peer,
+                    after={"outcome": "delivery_failed"},
+                )
+                await session.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="password reset delivery is unavailable",
+                ) from None
+            await record_audit_event(
+                session,
+                event_type=AuditEventType.PASSWORD_RESET_REQUESTED,
+                user_id=user.id,
+                actor_ip=peer,
+                after={"outcome": "token_issued"},
+            )
+            await session.commit()
+        else:
+            await record_audit_event(
+                session,
+                event_type=AuditEventType.PASSWORD_RESET_REQUESTED,
+                user_id=None,
+                actor_ip=peer,
+                after={"outcome": "no_such_user"},
+            )
+            await session.commit()
+    except ResetStoreUnavailableError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="password reset store unavailable",
+        ) from None
+    return {"status": "if the account exists, a reset link was sent"}
+
+
+@router.post("/password-reset", status_code=status.HTTP_200_OK)
+async def password_reset(
+    request: PasswordResetRequest,
+    http_request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, str]:
+    await set_bypass_scope(session)
+    try:
+        await reset_password_service(session, reset_store(), request.token, request.new_password)
+    except ResetTokenInvalidError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="reset token is invalid or expired",
+        ) from None
+    except ResetStoreUnavailableError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="password reset store unavailable",
+        ) from None
+    return {"status": "password updated"}
 
 
 @router.get("/me")

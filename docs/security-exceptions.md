@@ -77,6 +77,10 @@ Registro oficial das excecoes aplicadas aos scanners de vulnerabilidade. Toda ex
 
 Total: 55 excecoes ativas.
 
+### Revisão de 2026-09-01 (F1.5)
+
+Reverificado o Docker Hub em 2026-09-01: a tag mais recente de `minio/minio` continua sendo `RELEASE.2025-09-07T16-13-09Z` (última atualização 2025-09-07). A condição de remoção (publicação de release com correção aplicável) não se realizou. A exceção permanece inalterada: mesmo escopo (job `minio-scan` exclusivamente), mesma expiração (2026-12-31) e mesma lista de CVEs. Sem ampliação e sem renovação.
+
 ## Historico: excecoes da imagem web removidas nesta correcao
 
 As 4 excecoes de `.trivyignore-web` (tar, brace-expansion, ip-address, picomatch — internos do npm embarcado) foram REMOVIDAS em 2026-08-30. A justificativa anterior ("somente build tool") estava incorreta: o npm e o pnpm globais permaneciam na imagem executada que serve a aplicacao. Correcao real: o Dockerfile web passou a usar o pnpm standalone 11.24.0 (binario unico musl, tar >= 7.5.22, sem brace-expansion nem ip-address embutidos) e remove o npm da imagem final. Re-scan da imagem sem ignorefile: 0 findings HIGH/CRITICAL. O arquivo `.trivyignore-web` foi excluido do repositorio.

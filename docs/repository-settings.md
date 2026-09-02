@@ -31,6 +31,11 @@ Nomes confirmados por execução real no GitHub (PR #12, rodadas de CI e Securit
 - `Image Scan`;
 - `MinIO Image Scan`.
 
+Nomes adicionados pelo workflow Security da F1.5 (definidos em `.github/workflows/security.yml`; observar a primeira execução real no PR da F1.5 antes de marcá-los como obrigatórios — esta lista ainda NÃO foi observada em execução):
+
+- `ZAP Baseline`;
+- `Scope Isolation`.
+
 Nunca selecione checks inexistentes e reavalie esta lista sempre que um workflow mudar de nome.
 
 ## Dependabot e auto-merge

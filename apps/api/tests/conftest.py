@@ -5,6 +5,7 @@ from pathlib import Path
 
 import asyncpg
 import pytest
+import redis.asyncio as redis
 from alembic import command
 from alembic.config import Config
 from cryptography.fernet import Fernet
@@ -68,6 +69,7 @@ async def table_names(url: str) -> set[str]:
 os.environ["DATABASE_URL"] = async_url(PERSISTENCE_DB)
 os.environ.setdefault("REDIS_URL", os.environ.get("TEST_REDIS_URL", "redis://localhost:6379/15"))
 os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault("CORS_ALLOWED_ORIGINS", "https://app.cifra.local")
 os.environ.setdefault("JWT_SIGNING_KEY", "unit-test-signing-key-0123456789abcdef0123456789abcdef")
 os.environ.setdefault("TOTP_ENCRYPTION_KEY", Fernet.generate_key().decode())
 os.environ.setdefault(
@@ -79,7 +81,10 @@ os.environ.setdefault(
 async def migrated_engine() -> AsyncIterator[AsyncEngine]:
     await recreate_database(PERSISTENCE_DB)
     await asyncio.to_thread(command.upgrade, alembic_config(PERSISTENCE_DB), "head")
-    engine = create_async_engine(async_url(PERSISTENCE_DB))
+    engine = create_async_engine(
+        async_url(PERSISTENCE_DB),
+        connect_args={"server_settings": {"role": "cifra_app"}},
+    )
     yield engine
     await engine.dispose()
 
@@ -88,6 +93,32 @@ async def migrated_engine() -> AsyncIterator[AsyncEngine]:
 async def db_session(migrated_engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
     factory = async_sessionmaker(migrated_engine, expire_on_commit=False, autoflush=False)
     async with factory() as session:
+        from app.core.db import set_bypass_scope
+
+        await set_bypass_scope(session)
         yield session
-    async with migrated_engine.begin() as connection:
-        await connection.execute(text("TRUNCATE " + ", ".join(F1_TABLES) + " CASCADE"))
+    admin_engine = create_async_engine(async_url(PERSISTENCE_DB))
+    try:
+        async with admin_engine.begin() as connection:
+            await connection.execute(text("TRUNCATE " + ", ".join(F1_TABLES) + " CASCADE"))
+    finally:
+        await admin_engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+async def _clean_rate_limit_keys() -> AsyncIterator[None]:
+    client = redis.from_url(
+        os.environ.get("REDIS_URL", "redis://localhost:6379/15"), decode_responses=True
+    )
+    try:
+        await client.delete(
+            "cifra:ratelimit:register:testclient", "cifra:ratelimit:login:testclient"
+        )
+        yield
+    finally:
+        keys = []
+        async for key in client.scan_iter(match="cifra:ratelimit:*"):
+            keys.append(key)
+        if keys:
+            await client.delete(*keys)
+        await client.aclose()

@@ -144,3 +144,19 @@ def test_collects_all_problems_before_raising() -> None:
         "hibp_timeout_seconds",
     ):
         assert field in str(raised.value)
+
+
+def test_production_cors_problem_is_reported_exactly_once() -> None:
+    settings = make_settings(cors_allowed_origins="")
+    with pytest.raises(RuntimeError) as raised:
+        ensure_secure_configuration(settings)
+    message = str(raised.value)
+    assert message.count("cors_allowed_origins must list at least one origin") == 1
+
+
+def test_trust_proxy_problem_is_reported_exactly_once() -> None:
+    settings = make_settings(trust_proxy_headers=True, trusted_proxies="")
+    with pytest.raises(RuntimeError) as raised:
+        ensure_secure_configuration(settings)
+    message = str(raised.value)
+    assert message.count("trusted_proxies must list at least one proxy") == 1
