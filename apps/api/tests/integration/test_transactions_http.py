@@ -91,7 +91,7 @@ async def test_transaction_crud_moves_balance_and_reverses(tx_client: httpx.Asyn
         },
     )
     assert replay.status_code == 201
-    assert replay.json()["transaction_id"] == deposit.json()["transaction_id"]
+    assert replay.json()["id"] == deposit.json()["id"]
 
     conflict = await tx_client.post(
         f"/accounts/{account_id}/transactions",
@@ -118,7 +118,7 @@ async def test_transaction_crud_moves_balance_and_reverses(tx_client: httpx.Asyn
         },
     )
     assert withdrawal.status_code == 201
-    withdrawal_id = withdrawal.json()["transaction_id"]
+    withdrawal_id = withdrawal.json()["id"]
 
     reversal = await tx_client.post(
         f"/accounts/{account_id}/transactions/{withdrawal_id}/reversal",

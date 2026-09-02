@@ -6,14 +6,51 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import bind_current_user, get_session
-from app.models import Account, User
+from app.models import Account, Transaction, User
 from app.routers.auth import get_current_user
 from app.schemas.accounts import AccountCreate, AccountOut, AccountUpdate, account_to_out
+from app.schemas.balance import AccountBalanceOut
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
 DbSession = Annotated[AsyncSession, Depends(get_session)]
+
+
+@router.get("/{account_id}/balance", response_model=AccountBalanceOut)
+async def account_balance(
+    account_id: uuid.UUID,
+    user: CurrentUser,
+    session: DbSession,
+    projected: bool = False,
+) -> AccountBalanceOut:
+    await bind_current_user(session, user.id)
+    account = await _owned_account(account_id, user.id, session)
+    current = account.current_balance_cents
+    pending = 0
+    if projected:
+        from sqlalchemy import func
+
+        row = await session.execute(
+            select(func.coalesce(func.sum(Transaction.amount_cents), 0)).where(
+                Transaction.account_id == account_id,
+                Transaction.status == "pending",
+            )
+        )
+        raw = int(row.scalar_one())
+        debits = await session.execute(
+            select(func.coalesce(func.sum(Transaction.amount_cents), 0)).where(
+                Transaction.account_id == account_id,
+                Transaction.status == "pending",
+                Transaction.kind == "debit",
+            )
+        )
+        pending = raw - 2 * int(debits.scalar_one())
+    return AccountBalanceOut(
+        account_id=str(account_id),
+        current_balance_cents=current,
+        projected_balance_cents=current + pending,
+    )
 
 
 async def _owned_account(

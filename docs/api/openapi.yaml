@@ -1,5 +1,22 @@
 components:
   schemas:
+    AccountBalanceOut:
+      properties:
+        account_id:
+          title: Account Id
+          type: string
+        current_balance_cents:
+          title: Current Balance Cents
+          type: integer
+        projected_balance_cents:
+          title: Projected Balance Cents
+          type: integer
+      required:
+      - account_id
+      - current_balance_cents
+      - projected_balance_cents
+      title: AccountBalanceOut
+      type: object
     AccountCreate:
       additionalProperties: false
       properties:
@@ -271,6 +288,18 @@ components:
       - name
       title: RegisterRequest
       type: object
+    ReversalCreate:
+      additionalProperties: false
+      properties:
+        idempotency_key:
+          maxLength: 255
+          minLength: 1
+          title: Idempotency Key
+          type: string
+      required:
+      - idempotency_key
+      title: ReversalCreate
+      type: object
     SetupTwoFactorResponse:
       additionalProperties: false
       properties:
@@ -302,6 +331,129 @@ components:
       - access_token
       - refresh_token
       title: TokenPair
+      type: object
+    TransactionCreate:
+      additionalProperties: false
+      properties:
+        amount_cents:
+          exclusiveMinimum: 0.0
+          title: Amount Cents
+          type: integer
+        description:
+          anyOf:
+          - maxLength: 500
+            minLength: 1
+            type: string
+          - type: 'null'
+          title: Description
+        external_id:
+          anyOf:
+          - maxLength: 255
+            minLength: 1
+            type: string
+          - type: 'null'
+          title: External Id
+        fingerprint:
+          anyOf:
+          - maxLength: 255
+            minLength: 1
+            type: string
+          - type: 'null'
+          title: Fingerprint
+        idempotency_key:
+          maxLength: 255
+          minLength: 1
+          title: Idempotency Key
+          type: string
+        occurred_at:
+          format: date-time
+          title: Occurred At
+          type: string
+        operation_type:
+          title: Operation Type
+          type: string
+      required:
+      - idempotency_key
+      - operation_type
+      - amount_cents
+      - occurred_at
+      title: TransactionCreate
+      type: object
+    TransactionOut:
+      properties:
+        amount_cents:
+          title: Amount Cents
+          type: integer
+        balance_after_cents:
+          default: 0
+          title: Balance After Cents
+          type: integer
+        balance_version:
+          default: 0
+          title: Balance Version
+          type: integer
+        category_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Category Id
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        external_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Id
+        fingerprint:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Fingerprint
+        id:
+          format: uuid
+          title: Id
+          type: string
+        kind:
+          title: Kind
+          type: string
+        occurred_at:
+          format: date-time
+          title: Occurred At
+          type: string
+        operation_type:
+          title: Operation Type
+          type: string
+        reversal_of_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Reversal Of Id
+        status:
+          title: Status
+          type: string
+      required:
+      - id
+      - kind
+      - operation_type
+      - status
+      - amount_cents
+      - occurred_at
+      - description
+      - external_id
+      - fingerprint
+      - reversal_of_id
+      - category_id
+      - created_at
+      title: TransactionOut
       type: object
     TwoFactorChallengeResponse:
       additionalProperties: false
@@ -506,6 +658,165 @@ paths:
       summary: Update Account
       tags:
       - accounts
+  /accounts/{account_id}/balance:
+    get:
+      operationId: account_balance_accounts__account_id__balance_get
+      parameters:
+      - in: path
+        name: account_id
+        required: true
+        schema:
+          format: uuid
+          title: Account Id
+          type: string
+      - in: query
+        name: projected
+        required: false
+        schema:
+          default: false
+          title: Projected
+          type: boolean
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountBalanceOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Account Balance
+      tags:
+      - accounts
+  /accounts/{account_id}/transactions:
+    get:
+      operationId: list_transactions_accounts__account_id__transactions_get
+      parameters:
+      - in: path
+        name: account_id
+        required: true
+        schema:
+          format: uuid
+          title: Account Id
+          type: string
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 50
+          title: Limit
+          type: integer
+      - in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          title: Offset
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/TransactionOut'
+                title: Response List Transactions Accounts  Account Id  Transactions
+                  Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Transactions
+      tags:
+      - transactions
+    post:
+      operationId: create_transaction_accounts__account_id__transactions_post
+      parameters:
+      - in: path
+        name: account_id
+        required: true
+        schema:
+          format: uuid
+          title: Account Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Create Transaction
+      tags:
+      - transactions
+  /accounts/{account_id}/transactions/{transaction_id}/reversal:
+    post:
+      operationId: reverse_transaction_accounts__account_id__transactions__transaction_id__reversal_post
+      parameters:
+      - in: path
+        name: account_id
+        required: true
+        schema:
+          format: uuid
+          title: Account Id
+          type: string
+      - in: path
+        name: transaction_id
+        required: true
+        schema:
+          format: uuid
+          title: Transaction Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReversalCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Reverse Transaction
+      tags:
+      - transactions
   /auth/2fa/challenge:
     post:
       operationId: two_factor_challenge_auth_2fa_challenge_post
