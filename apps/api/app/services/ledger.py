@@ -31,6 +31,26 @@ class IdempotencyConflictError(LedgerError):
     pass
 
 
+@dataclass(frozen=True, slots=True)
+class TransferResult:
+    transfer_group_id: UUID
+    out_transaction_id: UUID
+    in_transaction_id: UUID
+    amount_cents: int
+
+
+async def apply_transfer(
+    session: AsyncSession,
+    from_account_id: UUID,
+    to_account_id: UUID,
+    user_id: UUID,
+    idempotency_key: str,
+    amount_cents: int,
+    occurred_at: datetime,
+) -> TransferResult:
+    raise NotImplementedError
+
+
 _ALLOWED_OPERATIONS = ("deposit", "withdrawal", "reversal")
 
 
