@@ -25,6 +25,7 @@ dependencies = [
 [dependency-groups]
 dev = [
   "asyncpg-stubs==0.31.1",
+  "hypothesis>=6.167.1",
   "mypy==1.19.1",
   "pip-audit==2.10.1",
   "pytest==9.1.1",
