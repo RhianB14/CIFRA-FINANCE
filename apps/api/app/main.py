@@ -8,6 +8,7 @@ from app.core.settings import cors_origins, ensure_secure_configuration, get_set
 from app.routers.accounts import router as accounts_router
 from app.routers.auth import router as auth_router
 from app.routers.health import router as health_router
+from app.routers.taxonomy import router as taxonomy_router
 from app.routers.transactions import router as transactions_router
 
 
@@ -28,3 +29,4 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(accounts_router)
 app.include_router(transactions_router)
+app.include_router(taxonomy_router)

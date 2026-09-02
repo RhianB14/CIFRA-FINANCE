@@ -153,6 +153,92 @@ components:
       - password
       title: Body_login_auth_login_post
       type: object
+    CategoryCreate:
+      additionalProperties: false
+      properties:
+        color:
+          anyOf:
+          - pattern: "^#[0-9A-Fa-f]{6}$"
+            type: string
+          - type: 'null'
+          title: Color
+        kind:
+          title: Kind
+          type: string
+        name:
+          maxLength: 120
+          minLength: 1
+          title: Name
+          type: string
+      required:
+      - name
+      - kind
+      title: CategoryCreate
+      type: object
+    CategoryOut:
+      properties:
+        archived_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Archived At
+        color:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Color
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        id:
+          format: uuid
+          title: Id
+          type: string
+        kind:
+          title: Kind
+          type: string
+        name:
+          title: Name
+          type: string
+      required:
+      - id
+      - name
+      - kind
+      - color
+      - archived_at
+      - created_at
+      title: CategoryOut
+      type: object
+    CategoryUpdate:
+      additionalProperties: false
+      properties:
+        archived:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Archived
+        color:
+          anyOf:
+          - pattern: "^#[0-9A-Fa-f]{6}$"
+            type: string
+          - type: 'null'
+          title: Color
+        kind:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Kind
+        name:
+          anyOf:
+          - maxLength: 120
+            minLength: 1
+            type: string
+          - type: 'null'
+          title: Name
+      title: CategoryUpdate
+      type: object
     ChallengeRequest:
       additionalProperties: false
       properties:
@@ -325,6 +411,37 @@ components:
       - otpauth_uri
       - qr_data_uri
       title: SetupTwoFactorResponse
+      type: object
+    TagCreate:
+      additionalProperties: false
+      properties:
+        name:
+          maxLength: 60
+          minLength: 1
+          title: Name
+          type: string
+      required:
+      - name
+      title: TagCreate
+      type: object
+    TagOut:
+      properties:
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        id:
+          format: uuid
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+      required:
+      - id
+      - name
+      - created_at
+      title: TagOut
       type: object
     TokenPair:
       additionalProperties: false
@@ -1096,6 +1213,109 @@ paths:
       summary: Register
       tags:
       - auth
+  /categories:
+    get:
+      operationId: list_categories_categories_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/CategoryOut'
+                title: Response List Categories Categories Get
+                type: array
+          description: Successful Response
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Categories
+      tags:
+      - taxonomy
+    post:
+      operationId: create_category_categories_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Create Category
+      tags:
+      - taxonomy
+  /categories/{category_id}:
+    delete:
+      operationId: delete_category_categories__category_id__delete
+      parameters:
+      - in: path
+        name: category_id
+        required: true
+        schema:
+          format: uuid
+          title: Category Id
+          type: string
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Delete Category
+      tags:
+      - taxonomy
+    patch:
+      operationId: update_category_categories__category_id__patch
+      parameters:
+      - in: path
+        name: category_id
+        required: true
+        schema:
+          format: uuid
+          title: Category Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryUpdate'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Update Category
+      tags:
+      - taxonomy
   /health/live:
     get:
       operationId: live_health_live_get
@@ -1132,3 +1352,72 @@ paths:
       summary: Ready
       tags:
       - health
+  /tags:
+    get:
+      operationId: list_tags_tags_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/TagOut'
+                title: Response List Tags Tags Get
+                type: array
+          description: Successful Response
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Tags
+      tags:
+      - taxonomy
+    post:
+      operationId: create_tag_tags_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Create Tag
+      tags:
+      - taxonomy
+  /tags/{tag_id}:
+    delete:
+      operationId: delete_tag_tags__tag_id__delete
+      parameters:
+      - in: path
+        name: tag_id
+        required: true
+        schema:
+          format: uuid
+          title: Tag Id
+          type: string
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Delete Tag
+      tags:
+      - taxonomy
