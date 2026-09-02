@@ -24,6 +24,7 @@ from app.services.ledger import (
     apply_reversal,
     apply_transfer,
 )
+from app.services.scheduled import ScheduledError, create_scheduled
 
 router = APIRouter(prefix="/accounts/{account_id}/transactions", tags=["transactions"])
 
@@ -50,6 +51,39 @@ async def create_transaction(
     session: DbSession,
 ) -> TransactionOut:
     await bind_current_user(session, user.id)
+    if payload.occurred_at > datetime.now(UTC):
+        try:
+            scheduled = await create_scheduled(
+                session,
+                account_id=account_id,
+                user_id=user.id,
+                idempotency_key=payload.idempotency_key,
+                operation_type=payload.operation_type,
+                amount_cents=payload.amount_cents,
+                occurred_at=payload.occurred_at,
+                description=payload.description,
+                external_id=payload.external_id,
+                fingerprint=payload.fingerprint,
+            )
+        except ScheduledError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        except IdempotencyConflictError:
+            raise HTTPException(status_code=409, detail="idempotency key conflict") from None
+        await session.commit()
+        return TransactionOut(
+            id=scheduled.transaction_id,
+            kind="credit" if payload.operation_type == "deposit" else "debit",
+            operation_type=payload.operation_type,
+            status="pending",
+            amount_cents=payload.amount_cents,
+            occurred_at=payload.occurred_at,
+            description=payload.description,
+            external_id=payload.external_id,
+            fingerprint=payload.fingerprint,
+            reversal_of_id=None,
+            category_id=None,
+            created_at=datetime.now(UTC),
+        )
     try:
         result = await apply_ledger_movement(
             session,
