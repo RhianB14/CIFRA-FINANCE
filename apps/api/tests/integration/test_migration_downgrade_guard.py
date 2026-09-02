@@ -3,8 +3,16 @@ import asyncio
 import asyncpg
 import pytest
 from alembic import command
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 
 from tests.conftest import admin_dsn, alembic_config, recreate_database
+
+
+def _head_revision() -> str:
+    configuration = Config("alembic.ini")
+    configuration.set_main_option("script_location", "migrations")
+    return str(ScriptDirectory.from_config(configuration).get_current_head())
 
 
 async def _seed_f2_rows(database: str) -> None:
@@ -79,5 +87,5 @@ async def test_downgrade_with_transfer_rows_is_rejected_transactionally() -> Non
     with pytest.raises(Exception, match="transfer rows present"):
         await asyncio.to_thread(command.downgrade, configuration, "0004")
 
-    assert await _migration_version(database) == "0009"
+    assert await _migration_version(database) == _head_revision()
     assert await _transfer_row_count(database) == 2
