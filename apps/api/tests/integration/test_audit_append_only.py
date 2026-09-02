@@ -5,26 +5,31 @@ from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import set_bypass_scope
-from app.models import AuditEvent
+from app.models import AuditEvent, User
 from app.services.audit import AuditEventType, record_audit_event
 
 
-async def _event_count(db_session: AsyncSession) -> int:
+async def _event_count(db_session: AsyncSession, user_id: object | None = None) -> int:
     await set_bypass_scope(db_session)
-    result = await db_session.execute(text("SELECT count(*) FROM audit_events"))
+    result = await db_session.execute(
+        text(
+            "SELECT count(*) FROM audit_events"
+            " WHERE (CAST(:uid AS uuid) IS NULL OR user_id = CAST(:uid AS uuid))"
+        ),
+        {"uid": str(user_id) if user_id is not None else None},
+    )
     return int(result.scalar_one())
 
 
 async def test_direct_update_is_rejected_by_database(
     db_session: AsyncSession,
 ) -> None:
-    from app.core.db import set_bypass_scope
-    from app.models import User
 
     await set_bypass_scope(db_session)
     user = User(email="audit-upd@example.com", name="Ana", password_hash="argon2id$x")
     db_session.add(user)
     await db_session.flush()
+    user_id = user.id
     await record_audit_event(
         db_session,
         event_type=AuditEventType.LOGIN_SUCCEEDED,
@@ -39,19 +44,18 @@ async def test_direct_update_is_rejected_by_database(
         await db_session.commit()
     await db_session.rollback()
     assert "audit_events" in str(error.value)
-    assert await _event_count(db_session) == 1
+    assert await _event_count(db_session, user_id) == 1
 
 
 async def test_direct_delete_is_rejected_by_database(
     db_session: AsyncSession,
 ) -> None:
-    from app.core.db import set_bypass_scope
-    from app.models import User
 
     await set_bypass_scope(db_session)
     user = User(email="audit-del@example.com", name="Ana", password_hash="argon2id$x")
     db_session.add(user)
     await db_session.flush()
+    user_id = user.id
     await record_audit_event(
         db_session,
         event_type=AuditEventType.LOGIN_SUCCEEDED,
@@ -66,26 +70,25 @@ async def test_direct_delete_is_rejected_by_database(
         await db_session.commit()
     await db_session.rollback()
     assert "audit_events" in str(error.value)
-    assert await _event_count(db_session) == 1
+    assert await _event_count(db_session, user_id) == 1
 
 
 async def test_event_and_use_case_share_transaction_semantics(
     db_session: AsyncSession,
 ) -> None:
-    from app.core.db import set_bypass_scope
-    from app.models import User
 
     await set_bypass_scope(db_session)
     user = User(email="audit-tx@example.com", name="Ana", password_hash="argon2id$x")
     db_session.add(user)
     await db_session.flush()
+    user_id = user.id
     await record_audit_event(
         db_session,
         event_type=AuditEventType.TWO_FACTOR_ACTIVATED,
         user_id=user.id,
     )
     await db_session.commit()
-    assert await _event_count(db_session) == 1
+    assert await _event_count(db_session, user_id) == 1
     occurred = await db_session.execute(
         text("SELECT occurred_at FROM audit_events ORDER BY occurred_at LIMIT 1")
     )
