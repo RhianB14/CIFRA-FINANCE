@@ -7,6 +7,7 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import ImportBatch, Transaction
@@ -126,7 +127,7 @@ async def import_csv(
         )
         imported += 1
 
-    batch = ImportBatch(
+    batch_values = dict(
         id=uuid.uuid4(),
         user_id=user_id,
         account_id=account_id,
@@ -137,10 +138,40 @@ async def import_csv(
         imported_count=imported,
         skipped_count=skipped,
     )
-    session.add(batch)
+    batch_stmt = (
+        pg_insert(ImportBatch)
+        .values(**batch_values)
+        .on_conflict_do_nothing(
+            index_elements=[
+                ImportBatch.user_id,
+                ImportBatch.account_id,
+                ImportBatch.file_sha256,
+            ]
+        )
+        .returning(ImportBatch.id)
+    )
+    batch_row = (await session.execute(batch_stmt)).first()
+    if batch_row is None:
+        winner = await session.execute(
+            select(ImportBatch).where(
+                ImportBatch.user_id == user_id,
+                ImportBatch.account_id == account_id,
+                ImportBatch.file_sha256 == sha,
+            )
+        )
+        winner_batch = winner.scalar_one_or_none()
+        if winner_batch is None:
+            raise ImportError_("import batch vanished during concurrent import")
+        return ImportResult(
+            batch_id=winner_batch.id,
+            row_count=winner_batch.row_count,
+            imported_count=0,
+            skipped_count=winner_batch.imported_count,
+            file_sha256=winner_batch.file_sha256,
+        )
     await session.commit()
     return ImportResult(
-        batch_id=batch.id,
+        batch_id=batch_row.id,
         row_count=row_count,
         imported_count=imported,
         skipped_count=skipped,
