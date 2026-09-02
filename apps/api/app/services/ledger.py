@@ -115,25 +115,21 @@ async def apply_transfer(
         return await _transfer_replay_result(session, replay_leg, amount_cents)
 
     group_id = uuid.uuid4()
-
-    from_locked = (
+    first_lock_id, second_lock_id = sorted((from_account_id, to_account_id))
+    locked_rows = (
         await session.execute(
-            select(Account.current_balance_cents, Account.current_balance_version)
-            .where(Account.id == from_account_id)
+            select(Account.id, Account.current_balance_cents, Account.current_balance_version)
+            .where(Account.id.in_([first_lock_id, second_lock_id]))
             .with_for_update()
         )
-    ).one()
-    to_locked = (
-        await session.execute(
-            select(Account.current_balance_cents, Account.current_balance_version)
-            .where(Account.id == to_account_id)
-            .with_for_update()
-        )
-    ).one()
-    out_balance_after = from_locked.current_balance_cents - amount_cents
-    out_version_after = from_locked.current_balance_version + 1
-    in_balance_after = to_locked.current_balance_cents + amount_cents
-    in_version_after = to_locked.current_balance_version + 1
+    ).all()
+    locked_by_id = {row.id: row for row in locked_rows}
+    source_locked = locked_by_id[from_account_id]
+    destination_locked = locked_by_id[to_account_id]
+    out_balance_after = source_locked.current_balance_cents - amount_cents
+    out_version_after = source_locked.current_balance_version + 1
+    in_balance_after = destination_locked.current_balance_cents + amount_cents
+    in_version_after = destination_locked.current_balance_version + 1
 
     out_stmt = (
         pg_insert(Transaction)
