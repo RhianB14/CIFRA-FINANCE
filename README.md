@@ -106,6 +106,28 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 As três variáveis são obrigatórias fora de ambiente de teste; a API recusa iniciar sem elas (`ENVIRONMENT` diferente de `test` exige chaves e pepper com tamanho e independência suficientes).
 
+## Contas e lançamentos (F2)
+
+Todos os endpoints exigem Bearer e operam isolados por usuário via RLS (escopo re-aplicado a cada transação; usuário B lê recurso de A → 404).
+
+| Endpoint | Função |
+|---|---|
+| `POST /accounts` / `GET /accounts` / `GET /accounts/{id}` / `PATCH /accounts/{id}` / `DELETE /accounts/{id}` | CRUD de contas (nome, tipo, moeda, saldo inicial) |
+| `GET /accounts/{id}/balance` | Saldo atual derivado do ledger append-only |
+| `GET /accounts/{id}/balance/projected` | Saldo projetado com lançamentos agendados |
+| `POST /accounts/{id}/transactions` | Lançamento idempotente por `Idempotency-Key` (conflito → 409 tipado) |
+| `POST /accounts/{id}/transactions/transfers` | Transferência atômica entre contas (duas pernas, `transfer_group_id`) |
+| `POST /accounts/{id}/transactions/{tx}/reversals` | Reversa com optimistic locking (`expected_version`); stale/dupla → 409 |
+| `GET /accounts/{id}/transactions` | Histórico paginado |
+| `POST /accounts/{id}/imports` | Importação CSV idempotente: SHA-256 do conteúdo, `external_id`, fingerprint; duplicados não duplicam |
+| `GET /accounts/{id}/imports` | Lotes de importação com contagens |
+| `POST /accounts/{id}/imports/{batch}/reconcile` | Reconcilia contra snapshot de saldo bancário (difere → 409 tipado) |
+| `POST /accounts/{id}/attachments` | Upload de anexo para MinIO (proprietário da conta apenas) |
+| `GET /accounts/{id}/attachments` | Lista anexos da conta |
+| `POST /accounts/{id}/attachments/{attachment}/download` | URL de download assinada, só do dono |
+
+O ledger é append-only (migração 0003/0004 com CHECKs e RLS); saldos versionados com locking otimista; categorias/tags via `/taxonomy` (CRUD + apply). O bucket de anexos é garantido no startup da API (`ensure_bucket` idempotente). Smoke E2E canônico: `scripts/f2_smoke.py` valida conta A = 1000 + 500 − 120 − 200 = **1180** e conta B = **200** (R$ 1.180,00 / R$ 200,00) contra a stack Docker real; `scripts/f2_smoke.py` requer `SMOKE_BASE_URL` (default `http://localhost:18000`).
+
 ## Docker Compose
 
 No PowerShell:
