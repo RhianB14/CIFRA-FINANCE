@@ -51,6 +51,7 @@ async def import_csv(
     existing_batch = await session.execute(
         select(ImportBatch).where(
             ImportBatch.user_id == user_id,
+            ImportBatch.account_id == account_id,
             ImportBatch.file_sha256 == sha,
         )
     )

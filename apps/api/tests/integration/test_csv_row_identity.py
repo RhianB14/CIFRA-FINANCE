@@ -85,6 +85,37 @@ async def test_csv_duplicate_rows_within_file_are_skipped(
 
 
 @pytest.mark.asyncio
+async def test_same_file_in_different_account_creates_new_batch(
+    tx_client: httpx.AsyncClient,
+) -> None:
+    account_a = await _create_account(tx_client)
+    account_b = await _create_account(tx_client)
+    rows = [
+        "2026-09-01T10:00:00+00:00,500,credit,pagamento aluguel,",
+        "2026-09-02T10:00:00+00:00,120,debit,compra mercado,",
+    ]
+    first = await tx_client.post(
+        f"/accounts/{account_a}/imports",
+        files={"file": ("f.csv", _csv(rows))},
+        data={"source_name": "banco-x"},
+    )
+    assert first.status_code == 201, first.text
+    first_body = first.json()
+    assert first_body["imported_count"] == 2
+
+    second = await tx_client.post(
+        f"/accounts/{account_b}/imports",
+        files={"file": ("f.csv", _csv(rows))},
+        data={"source_name": "banco-x"},
+    )
+    assert second.status_code == 201, second.text
+    second_body = second.json()
+    assert second_body["id"] != first_body["id"]
+    assert second_body["imported_count"] == 2
+    assert second_body["skipped_count"] == 0
+
+
+@pytest.mark.asyncio
 async def test_csv_external_id_overflowing_key_limit_is_domain_error(
     tx_client: httpx.AsyncClient,
 ) -> None:
