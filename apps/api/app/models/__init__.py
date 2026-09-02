@@ -111,3 +111,76 @@ class AuditEvent(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    currency: Mapped[str] = mapped_column(CHAR(3), nullable=False)
+    initial_balance_cents: Mapped[int] = mapped_column(nullable=False, default=0)
+    current_balance_cents: Mapped[int] = mapped_column(nullable=False, default=0)
+    current_balance_version: Mapped[int] = mapped_column(nullable=False, default=0)
+    archived_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), onupdate=utc_now, nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('checking', 'savings', 'credit', 'cash', 'investment')",
+            name="accounts_kind_allowed",
+        ),
+        UniqueConstraint("user_id", "name", name="uq_accounts_user_id_name"),
+    )
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    account_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_signature: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    kind: Mapped[str] = mapped_column(CHAR(6), nullable=False)
+    operation_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="posted", server_default="posted"
+    )
+    amount_cents: Mapped[int] = mapped_column(nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    fingerprint: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
+    reversal_of_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("transactions.id", ondelete="RESTRICT"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("amount_cents > 0", name="transactions_amount_positive"),
+        CheckConstraint("kind IN ('credit', 'debit')", name="transactions_kind_allowed"),
+        CheckConstraint(
+            "operation_type IN ('deposit', 'withdrawal', 'reversal')",
+            name="transactions_operation_allowed",
+        ),
+        CheckConstraint("status IN ('pending', 'posted')", name="transactions_status_allowed"),
+        UniqueConstraint(
+            "account_id", "idempotency_key", name="uq_transactions_account_idempotency"
+        ),
+    )
