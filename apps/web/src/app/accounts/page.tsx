@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createApiClient } from "@cifra/api-client";
+import TransactionForm from "./transaction-form";
 
 const apiBaseUrl =
   process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -34,6 +35,18 @@ export default async function AccountsPage({ searchParams }: { searchParams: Sea
             </li>
           ))}
         </ul>
+      </section>
+      <section>
+        <h2>Novo lançamento</h2>
+        {accounts.length > 0 ? (
+          <TransactionForm
+            token={token}
+            accountId={accounts[0].id}
+            currency={accounts[0].currency}
+          />
+        ) : (
+          <p>Crie uma conta para lançar.</p>
+        )}
       </section>
     </main>
   );

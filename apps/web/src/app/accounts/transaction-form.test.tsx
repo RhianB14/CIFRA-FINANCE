@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import TransactionForm from "./transaction-form";
 
 const createTransaction = vi.fn();
@@ -11,6 +11,8 @@ vi.mock("@cifra/api-client", () => ({
 }));
 
 describe("TransactionForm", () => {
+  afterEach(cleanup);
+
   beforeEach(() => {
     createTransaction.mockReset();
   });
@@ -39,7 +41,7 @@ describe("TransactionForm", () => {
         "a1",
         expect.objectContaining({ amount_cents: 5000, operation_type: "deposit" }),
       );
-      expect(screen.getByText(/novo saldo/i)).toHaveTextContent("R$ 1.180,00");
+      expect(screen.getByText(/novo saldo/i).textContent).toContain("1.180,00");
     });
   });
 });

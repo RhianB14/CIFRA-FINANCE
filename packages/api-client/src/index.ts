@@ -29,6 +29,20 @@ export type Account = {
   archived: boolean;
 };
 
+export type TransactionInput = {
+  idempotency_key: string;
+  operation_type: string;
+  amount_cents: number;
+  occurred_at: string;
+  description?: string;
+};
+
+export type AccountBalance = {
+  account_id: string;
+  current_balance_cents: number;
+  projected_balance_cents: number;
+};
+
 export type CifraApiClient = {
   live: () => Promise<LiveStatus>;
   ready: () => Promise<ReadyStatus>;
@@ -36,6 +50,11 @@ export type CifraApiClient = {
   createAccount: (token: string, input: AccountInput) => Promise<Account>;
   updateAccount: (token: string, id: string, patch: AccountPatchInput) => Promise<Account>;
   deleteAccount: (token: string, id: string) => Promise<void>;
+  createTransaction: (
+    token: string,
+    accountId: string,
+    input: TransactionInput,
+  ) => Promise<AccountBalance>;
 };
 
 const requestJson = async <T>(request: typeof fetch, url: string): Promise<T> => {
@@ -85,5 +104,13 @@ export const createApiClient = ({ baseUrl, request = fetch }: ApiClientOptions):
     deleteAccount: async (token, id) => {
       await authedJson<undefined>(request, `${normalizedBaseUrl}/accounts/${id}`, token, "DELETE");
     },
+    createTransaction: (token, accountId, input) =>
+      authedJson<AccountBalance>(
+        request,
+        `${normalizedBaseUrl}/accounts/${accountId}/transactions`,
+        token,
+        "POST",
+        input,
+      ),
   };
 };
