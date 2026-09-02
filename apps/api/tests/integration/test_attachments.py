@@ -1,4 +1,5 @@
 import io
+import os
 import uuid
 from collections.abc import AsyncIterator
 
@@ -8,6 +9,10 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.db import get_session
+
+os.environ.setdefault("S3_ACCESS_KEY", "cifra_local")
+os.environ.setdefault("S3_SECRET_KEY", "cifra_local_development")
+os.environ.setdefault("S3_ENDPOINT", "http://localhost:9000")
 from app.main import app
 
 

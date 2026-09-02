@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://cifra:cifra_local_development@localhost:5432/cifra"
     redis_url: str = "redis://localhost:6379/0"
     s3_endpoint: str = "http://localhost:9000"
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+    s3_bucket_name: str = "cifra-attachments"
+    s3_region: str = "us-east-1"
 
     jwt_signing_key: str = ""
     jwt_issuer: str = "cifra-api"

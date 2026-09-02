@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,15 +9,18 @@ from app.core.db import bind_current_user, get_session
 from app.models import (
     Account,
     AccountBalanceSnapshot,
+    Attachment,
     ImportBatch,
     Transaction,
     User,
 )
 from app.routers.auth import get_current_user
 from app.schemas.accounts import AccountCreate, AccountOut, AccountUpdate, account_to_out
+from app.schemas.attachments import AttachmentOut
 from app.schemas.balance import AccountBalanceOut
 from app.schemas.imports import ImportBatchOut, SnapshotCreate, SnapshotOut
 from app.services.csv_import import ImportError_, import_csv
+from app.services.storage import ObjectStorage
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -141,6 +144,59 @@ async def list_snapshots(
         .order_by(AccountBalanceSnapshot.created_at.desc())
     )
     return [SnapshotOut.model_validate(s) for s in rows.scalars()]
+
+
+@router.post("/{account_id}/attachments", response_model=AttachmentOut, status_code=201)
+async def upload_attachment(
+    account_id: uuid.UUID,
+    file: Annotated[UploadFile, File(...)],
+    user: CurrentUser,
+    session: DbSession,
+) -> AttachmentOut:
+    await bind_current_user(session, user.id)
+    await _owned_account(account_id, user.id, session)
+    content = await file.read()
+    storage = ObjectStorage()
+    stored = await storage.put(
+        account_id=account_id,
+        file_name=file.filename or "upload.bin",
+        content=content,
+    )
+    attachment = Attachment(
+        user_id=user.id,
+        account_id=account_id,
+        file_name=file.filename or "upload.bin",
+        content_type=file.content_type or "application/octet-stream",
+        size_bytes=stored.size_bytes,
+        object_key=stored.object_key,
+        bucket=stored.bucket,
+        etag=stored.etag,
+    )
+    session.add(attachment)
+    await session.commit()
+    await session.refresh(attachment)
+    return AttachmentOut.model_validate(attachment)
+
+
+@router.get("/{account_id}/attachments/{attachment_id}")
+async def download_attachment(
+    account_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    user: CurrentUser,
+    session: DbSession,
+) -> Response:
+    await bind_current_user(session, user.id)
+    await _owned_account(account_id, user.id, session)
+    row = await session.get(Attachment, attachment_id)
+    if row is None or row.account_id != account_id:
+        raise HTTPException(status_code=404, detail="attachment not found")
+    storage = ObjectStorage()
+    content = await storage.get(object_key=row.object_key, bucket=row.bucket)
+    return Response(
+        content=content,
+        media_type=row.content_type,
+        headers={"Content-Disposition": f'attachment; filename="{row.file_name}"'},
+    )
 
 
 async def _owned_account(

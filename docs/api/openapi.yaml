@@ -118,6 +118,38 @@ components:
           title: Name
       title: AccountUpdate
       type: object
+    AttachmentOut:
+      properties:
+        account_id:
+          format: uuid
+          title: Account Id
+          type: string
+        content_type:
+          title: Content Type
+          type: string
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        file_name:
+          title: File Name
+          type: string
+        id:
+          format: uuid
+          title: Id
+          type: string
+        size_bytes:
+          title: Size Bytes
+          type: integer
+      required:
+      - id
+      - account_id
+      - file_name
+      - content_type
+      - size_bytes
+      - created_at
+      title: AttachmentOut
+      type: object
     Body_import_account_csv_accounts__account_id__imports_post:
       properties:
         file:
@@ -166,6 +198,16 @@ components:
       - username
       - password
       title: Body_login_auth_login_post
+      type: object
+    Body_upload_attachment_accounts__account_id__attachments_post:
+      properties:
+        file:
+          contentMediaType: application/octet-stream
+          title: File
+          type: string
+      required:
+      - file
+      title: Body_upload_attachment_accounts__account_id__attachments_post
       type: object
     CategoryCreate:
       additionalProperties: false
@@ -902,6 +944,76 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Update Account
+      tags:
+      - accounts
+  /accounts/{account_id}/attachments:
+    post:
+      operationId: upload_attachment_accounts__account_id__attachments_post
+      parameters:
+      - in: path
+        name: account_id
+        required: true
+        schema:
+          format: uuid
+          title: Account Id
+          type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_attachment_accounts__account_id__attachments_post'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Upload Attachment
+      tags:
+      - accounts
+  /accounts/{account_id}/attachments/{attachment_id}:
+    get:
+      operationId: download_attachment_accounts__account_id__attachments__attachment_id__get
+      parameters:
+      - in: path
+        name: account_id
+        required: true
+        schema:
+          format: uuid
+          title: Account Id
+          type: string
+      - in: path
+        name: attachment_id
+        required: true
+        schema:
+          format: uuid
+          title: Attachment Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Download Attachment
       tags:
       - accounts
   /accounts/{account_id}/balance:
