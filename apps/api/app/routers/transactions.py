@@ -13,11 +13,13 @@ from app.schemas.transactions import (
     ReversalCreate,
     TransactionCreate,
     TransactionOut,
+    TransferCreate,
 )
 from app.services.ledger import (
     IdempotencyConflictError,
     LedgerError,
     apply_ledger_movement,
+    apply_transfer,
 )
 
 router = APIRouter(prefix="/accounts/{account_id}/transactions", tags=["transactions"])
@@ -94,6 +96,37 @@ async def list_transactions(
         .offset(max(offset, 0))
     )
     return [TransactionOut.model_validate(t) for t in rows.scalars()]
+
+
+@router.post("/transfers", response_model=list[TransactionOut], status_code=201)
+async def create_transfer(
+    account_id: uuid.UUID,
+    payload: TransferCreate,
+    user: CurrentUser,
+    session: DbSession,
+) -> list[TransactionOut]:
+    await bind_current_user(session, user.id)
+    await _owned_account(account_id, user.id, session)
+    try:
+        result = await apply_transfer(
+            session,
+            from_account_id=account_id,
+            to_account_id=payload.target_account_id,
+            user_id=user.id,
+            idempotency_key=payload.idempotency_key,
+            amount_cents=payload.amount_cents,
+            occurred_at=datetime.now(UTC),
+        )
+    except IdempotencyConflictError:
+        raise HTTPException(status_code=409, detail="idempotency key conflict") from None
+    except LedgerError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    await session.commit()
+    out = await session.get(Transaction, result.out_transaction_id)
+    inn = await session.get(Transaction, result.in_transaction_id)
+    if out is None or inn is None:
+        raise HTTPException(status_code=500, detail="transfer legs missing")
+    return [TransactionOut.model_validate(out), TransactionOut.model_validate(inn)]
 
 
 @router.post("/{transaction_id}/reversal", response_model=TransactionOut, status_code=201)

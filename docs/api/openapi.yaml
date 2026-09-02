@@ -743,6 +743,34 @@ components:
       - created_at
       title: TransactionOut
       type: object
+    TransferCreate:
+      additionalProperties: false
+      properties:
+        amount_cents:
+          exclusiveMinimum: 0.0
+          title: Amount Cents
+          type: integer
+        idempotency_key:
+          maxLength: 255
+          minLength: 1
+          title: Idempotency Key
+          type: string
+        occurred_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Occurred At
+        target_account_id:
+          format: uuid
+          title: Target Account Id
+          type: string
+      required:
+      - idempotency_key
+      - amount_cents
+      - target_account_id
+      title: TransferCreate
+      type: object
     TwoFactorChallengeResponse:
       additionalProperties: false
       properties:
@@ -1232,6 +1260,45 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Create Transaction
+      tags:
+      - transactions
+  /accounts/{account_id}/transactions/transfers:
+    post:
+      operationId: create_transfer_accounts__account_id__transactions_transfers_post
+      parameters:
+      - in: path
+        name: account_id
+        required: true
+        schema:
+          format: uuid
+          title: Account Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/TransactionOut'
+                title: Response Create Transfer Accounts  Account Id  Transactions
+                  Transfers Post
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Create Transfer
       tags:
       - transactions
   /accounts/{account_id}/transactions/{transaction_id}/reversal:

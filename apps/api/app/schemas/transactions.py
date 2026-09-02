@@ -40,3 +40,12 @@ class TransactionOut(BaseModel):
     balance_after_cents: int = 0
     balance_version: int = 0
     created_at: datetime
+
+
+class TransferCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    idempotency_key: str = Field(min_length=1, max_length=255)
+    amount_cents: int = Field(gt=0)
+    target_account_id: uuid.UUID
+    occurred_at: datetime | None = None

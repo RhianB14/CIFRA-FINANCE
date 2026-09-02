@@ -175,7 +175,7 @@ async def test_transfer_route_moves_both_balances(tx_client: httpx.AsyncClient) 
     )
     target = other.json()["id"]
     response = await tx_client.post(
-        f"/accounts/{origin}/transfers",
+        f"/accounts/{origin}/transactions/transfers",
         json={"idempotency_key": "tr-1", "amount_cents": 32000, "target_account_id": target},
     )
     assert response.status_code == 201, response.text
