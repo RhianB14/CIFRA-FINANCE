@@ -61,7 +61,9 @@ async def att_client(
 
 
 @pytest.mark.asyncio
-async def test_attachment_upload_download(att_client: httpx.AsyncClient) -> None:
+async def test_attachment_upload_download(
+    storage_ready: None, att_client: httpx.AsyncClient
+) -> None:
     payload = b"receipt bytes"
     missing = await att_client.post(
         "/accounts/00000000-0000-0000-0000-000000000000/attachments",

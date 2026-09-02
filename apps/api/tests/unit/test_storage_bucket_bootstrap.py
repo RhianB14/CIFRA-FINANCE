@@ -6,8 +6,10 @@ import pytest
 from app.services.storage import ObjectStorage
 
 
-class _BucketMissing(Exception):
-    pass
+class _BucketMissingError(Exception):
+    def __init__(self, code: str) -> None:
+        self.response = {"Error": {"Code": code}}
+        super().__init__(code)
 
 
 class _ClientCtx:
@@ -31,7 +33,7 @@ class _SessionStub:
 
 def _client_stub() -> Any:
     client = AsyncMock()
-    client.exceptions = type("exceptions", (), {"ClientException": _BucketMissing})
+    client.exceptions = type("exceptions", (), {"ClientError": _BucketMissingError})
     return client
 
 
@@ -50,9 +52,9 @@ async def test_ensure_bucket_is_idempotent_when_bucket_exists() -> None:
     client.create_bucket.assert_not_awaited()
 
 
-async def test_ensure_bucket_creates_when_missing() -> None:
+async def test_ensure_bucket_creates_when_missing_404() -> None:
     client = _client_stub()
-    client.head_bucket = AsyncMock(side_effect=_BucketMissing())
+    client.head_bucket = AsyncMock(side_effect=_BucketMissingError("404"))
     client.create_bucket = AsyncMock(return_value={})
 
     storage = _storage(client)
@@ -62,11 +64,31 @@ async def test_ensure_bucket_creates_when_missing() -> None:
     client.create_bucket.assert_awaited_once_with(Bucket="cifra-attachments")
 
 
+async def test_ensure_bucket_creates_when_missing_no_such_bucket() -> None:
+    client = _client_stub()
+    client.head_bucket = AsyncMock(side_effect=_BucketMissingError("NoSuchBucket"))
+    client.create_bucket = AsyncMock(return_value={})
+
+    storage = _storage(client)
+    await storage.ensure_bucket()
+
+    client.create_bucket.assert_awaited_once_with(Bucket="cifra-attachments")
+
+
 async def test_ensure_bucket_fails_closed_when_create_errors() -> None:
     client = _client_stub()
-    client.head_bucket = AsyncMock(side_effect=_BucketMissing())
+    client.head_bucket = AsyncMock(side_effect=_BucketMissingError("404"))
     client.create_bucket = AsyncMock(side_effect=ValueError("boom"))
 
     storage = _storage(client)
     with pytest.raises(ValueError):
+        await storage.ensure_bucket()
+
+
+async def test_ensure_bucket_fails_closed_when_other_error() -> None:
+    client = _client_stub()
+    client.head_bucket = AsyncMock(side_effect=_BucketMissingError("AccessDenied"))
+
+    storage = _storage(client)
+    with pytest.raises(_BucketMissingError):
         await storage.ensure_bucket()

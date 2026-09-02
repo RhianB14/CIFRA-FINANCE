@@ -105,6 +105,15 @@ async def db_session(migrated_engine: AsyncEngine) -> AsyncIterator[AsyncSession
         await admin_engine.dispose()
 
 
+@pytest.fixture(scope="session")
+async def storage_ready() -> AsyncIterator[None]:
+    from app.services.storage import ObjectStorage
+
+    storage = ObjectStorage()
+    await storage.ensure_bucket()
+    yield
+
+
 @pytest.fixture(autouse=True)
 async def _clean_rate_limit_keys() -> AsyncIterator[None]:
     client = redis.from_url(

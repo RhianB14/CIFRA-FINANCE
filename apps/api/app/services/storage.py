@@ -51,8 +51,12 @@ class ObjectStorage:
             try:
                 await client.head_bucket(Bucket=self._bucket)
                 return
-            except client.exceptions.ClientException:
-                await client.create_bucket(Bucket=self._bucket)
+            except client.exceptions.ClientError as error:
+                code = error.response.get("Error", {}).get("Code", "")
+                if code in {"404", "NoSuchBucket"}:
+                    await client.create_bucket(Bucket=self._bucket)
+                    return
+                raise
 
     async def put(self, account_id: UUID, file_name: str, content: bytes) -> StoredAttachment:
         object_key = f"accounts/{account_id}/{uuid.uuid4().hex}-{file_name}"
