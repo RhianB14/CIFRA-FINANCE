@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.settings import cors_origins, ensure_secure_configuration, get_settings
+from app.routers.accounts import router as accounts_router
 from app.routers.auth import router as auth_router
 from app.routers.health import router as health_router
 
@@ -24,3 +25,4 @@ app.add_middleware(
 )
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(accounts_router)

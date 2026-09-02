@@ -104,7 +104,10 @@ async def register_and_login(
         json={"email": email, "name": "User", "password": password},
     )
     assert response.status_code in (200, 201), response.text
-    login = await http.post("/auth/login", json={"email": email, "password": password})
+    login = await http.post(
+        "/auth/login",
+        data={"username": email, "password": password},
+    )
     assert login.status_code == 200, login.text
     payload = login.json()
     return str(payload["access_token"])
