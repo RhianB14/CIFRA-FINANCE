@@ -116,20 +116,23 @@ async def apply_transfer(
 
     group_id = uuid.uuid4()
     first_lock_id, second_lock_id = sorted((from_account_id, to_account_id))
-    locked_rows = (
-        await session.execute(
-            select(Account.id, Account.current_balance_cents, Account.current_balance_version)
-            .where(Account.id.in_([first_lock_id, second_lock_id]))
-            .with_for_update()
+    balances: dict[uuid.UUID, tuple[int, int]] = {}
+    for lock_id in (first_lock_id, second_lock_id):
+        locked_row = (
+            await session.execute(
+                select(Account.current_balance_cents, Account.current_balance_version)
+                .where(Account.id == lock_id)
+                .with_for_update()
+            )
+        ).one()
+        balances[lock_id] = (
+            int(locked_row.current_balance_cents),
+            int(locked_row.current_balance_version),
         )
-    ).all()
-    locked_by_id = {row.id: row for row in locked_rows}
-    source_locked = locked_by_id[from_account_id]
-    destination_locked = locked_by_id[to_account_id]
-    out_balance_after = source_locked.current_balance_cents - amount_cents
-    out_version_after = source_locked.current_balance_version + 1
-    in_balance_after = destination_locked.current_balance_cents + amount_cents
-    in_version_after = destination_locked.current_balance_version + 1
+    out_balance_after = balances[from_account_id][0] - amount_cents
+    out_version_after = balances[from_account_id][1] + 1
+    in_balance_after = balances[to_account_id][0] + amount_cents
+    in_version_after = balances[to_account_id][1] + 1
 
     out_stmt = (
         pg_insert(Transaction)
