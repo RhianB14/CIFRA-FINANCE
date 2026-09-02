@@ -40,6 +40,29 @@ class TransferResult:
     amount_cents: int
 
 
+async def _transfer_replay_result(
+    session: AsyncSession,
+    out_leg: Transaction,
+    amount_cents: int,
+) -> TransferResult:
+    group_id = out_leg.transfer_group_id
+    if group_id is None:
+        raise LedgerError("stored transfer leg missing group id")
+    in_leg = await session.execute(
+        select(Transaction).where(
+            Transaction.transfer_group_id == group_id,
+            Transaction.operation_type == "transfer_in",
+        )
+    )
+    in_leg_row = in_leg.scalar_one()
+    return TransferResult(
+        transfer_group_id=group_id,
+        out_transaction_id=out_leg.id,
+        in_transaction_id=in_leg_row.id,
+        amount_cents=amount_cents,
+    )
+
+
 async def apply_transfer(
     session: AsyncSession,
     from_account_id: UUID,
@@ -81,24 +104,29 @@ async def apply_transfer(
     if replay_leg is not None:
         if replay_leg.payload_signature != signature:
             raise IdempotencyConflictError("idempotency key reused with different payload")
-        group_id = replay_leg.transfer_group_id
-        if group_id is None:
-            raise LedgerError("stored transfer leg missing group id")
-        in_leg = await session.execute(
-            select(Transaction).where(
-                Transaction.transfer_group_id == group_id,
-                Transaction.operation_type == "transfer_in",
-            )
-        )
-        in_leg_row = in_leg.scalar_one()
-        return TransferResult(
-            transfer_group_id=group_id,
-            out_transaction_id=replay_leg.id,
-            in_transaction_id=in_leg_row.id,
-            amount_cents=amount_cents,
-        )
+        return await _transfer_replay_result(session, replay_leg, amount_cents)
 
     group_id = uuid.uuid4()
+
+    from_locked = (
+        await session.execute(
+            select(Account.current_balance_cents, Account.current_balance_version)
+            .where(Account.id == from_account_id)
+            .with_for_update()
+        )
+    ).one()
+    to_locked = (
+        await session.execute(
+            select(Account.current_balance_cents, Account.current_balance_version)
+            .where(Account.id == to_account_id)
+            .with_for_update()
+        )
+    ).one()
+    out_balance_after = from_locked.current_balance_cents - amount_cents
+    out_version_after = from_locked.current_balance_version + 1
+    in_balance_after = to_locked.current_balance_cents + amount_cents
+    in_version_after = to_locked.current_balance_version + 1
+
     out_stmt = (
         pg_insert(Transaction)
         .values(
@@ -112,6 +140,8 @@ async def apply_transfer(
             amount_cents=amount_cents,
             occurred_at=occurred_at,
             transfer_group_id=group_id,
+            result_balance_after_cents=out_balance_after,
+            result_balance_version=out_version_after,
         )
         .on_conflict_do_nothing(
             index_elements=[Transaction.account_id, Transaction.idempotency_key]
@@ -120,7 +150,16 @@ async def apply_transfer(
     )
     out_row = (await session.execute(out_stmt)).first()
     if out_row is None:
-        raise IdempotencyConflictError("idempotency key reused with different payload")
+        winner = await session.execute(
+            select(Transaction).where(
+                Transaction.account_id == from_account_id,
+                Transaction.idempotency_key == idempotency_key,
+            )
+        )
+        winner_row = winner.scalar_one_or_none()
+        if winner_row is None or winner_row.payload_signature != signature:
+            raise IdempotencyConflictError("idempotency key reused with different payload")
+        return await _transfer_replay_result(session, winner_row, amount_cents)
     in_stmt = (
         pg_insert(Transaction)
         .values(
@@ -134,6 +173,8 @@ async def apply_transfer(
             amount_cents=amount_cents,
             occurred_at=occurred_at,
             transfer_group_id=group_id,
+            result_balance_after_cents=in_balance_after,
+            result_balance_version=in_version_after,
         )
         .on_conflict_do_nothing(
             index_elements=[Transaction.account_id, Transaction.idempotency_key]
@@ -144,30 +185,24 @@ async def apply_transfer(
     if in_row is None:
         raise LedgerError("unable to persist transfer destination leg")
 
-    out_balance = await session.execute(
+    await session.execute(
         update(Account)
         .where(Account.id == from_account_id)
         .values(
-            current_balance_cents=Account.current_balance_cents - amount_cents,
-            current_balance_version=Account.current_balance_version + 1,
+            current_balance_cents=out_balance_after,
+            current_balance_version=out_version_after,
             updated_at=func.now(),
         )
-        .returning(Account.current_balance_version)
     )
-    if out_balance.scalar_one_or_none() is None:
-        raise LedgerError("source account balance update failed")
-    in_balance = await session.execute(
+    await session.execute(
         update(Account)
         .where(Account.id == to_account_id)
         .values(
-            current_balance_cents=Account.current_balance_cents + amount_cents,
-            current_balance_version=Account.current_balance_version + 1,
+            current_balance_cents=in_balance_after,
+            current_balance_version=in_version_after,
             updated_at=func.now(),
         )
-        .returning(Account.current_balance_version)
     )
-    if in_balance.scalar_one_or_none() is None:
-        raise LedgerError("destination account balance update failed")
 
     return TransferResult(
         transfer_group_id=group_id,
@@ -226,8 +261,8 @@ async def _existing_result(
         account_id=existing.account_id,
         kind=existing.kind,
         amount_cents=existing.amount_cents,
-        balance_after_cents=0,
-        balance_version=0,
+        balance_after_cents=existing.result_balance_after_cents,
+        balance_version=existing.result_balance_version,
         created=False,
         reversal_of_id=existing.reversal_of_id,
     )
@@ -281,6 +316,17 @@ async def apply_ledger_movement(
             raise LedgerError("reversal amount must match the original")
         kind = "debit" if original.kind == "credit" else "credit"
 
+    locked = (
+        await session.execute(
+            select(Account.current_balance_cents, Account.current_balance_version)
+            .where(Account.id == account_id)
+            .with_for_update()
+        )
+    ).one()
+    delta = amount_cents if kind == "credit" else -amount_cents
+    balance_after = locked.current_balance_cents + delta
+    version_after = locked.current_balance_version + 1
+
     insert_stmt = (
         pg_insert(Transaction)
         .values(
@@ -297,6 +343,8 @@ async def apply_ledger_movement(
             external_id=external_id,
             fingerprint=fingerprint,
             reversal_of_id=reverses_transaction_id,
+            result_balance_after_cents=balance_after,
+            result_balance_version=version_after,
         )
         .on_conflict_do_nothing(
             index_elements=[Transaction.account_id, Transaction.idempotency_key]
@@ -310,18 +358,15 @@ async def apply_ledger_movement(
             raise LedgerError("unable to persist ledger movement")
         return replay_after_race
 
-    delta = amount_cents if kind == "credit" else -amount_cents
-    balance_row = await session.execute(
+    await session.execute(
         update(Account)
         .where(Account.id == account_id)
         .values(
-            current_balance_cents=Account.current_balance_cents + delta,
-            current_balance_version=Account.current_balance_version + 1,
+            current_balance_cents=balance_after,
+            current_balance_version=version_after,
             updated_at=func.now(),
         )
-        .returning(Account.current_balance_cents, Account.current_balance_version)
     )
-    balance_after, version = balance_row.one()
 
     return LedgerResult(
         transaction_id=inserted.id,
@@ -329,7 +374,7 @@ async def apply_ledger_movement(
         kind=kind,
         amount_cents=amount_cents,
         balance_after_cents=balance_after,
-        balance_version=version,
+        balance_version=version_after,
         created=True,
         reversal_of_id=reverses_transaction_id,
     )
