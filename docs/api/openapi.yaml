@@ -490,7 +490,7 @@ components:
           - type: 'null'
           title: Expected Version
         idempotency_key:
-          maxLength: 255
+          maxLength: 128
           minLength: 1
           title: Idempotency Key
           type: string
@@ -649,7 +649,7 @@ components:
           - type: 'null'
           title: Fingerprint
         idempotency_key:
-          maxLength: 255
+          maxLength: 128
           minLength: 1
           title: Idempotency Key
           type: string
@@ -751,7 +751,7 @@ components:
           title: Amount Cents
           type: integer
         idempotency_key:
-          maxLength: 255
+          maxLength: 128
           minLength: 1
           title: Idempotency Key
           type: string

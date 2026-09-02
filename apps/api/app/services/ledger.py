@@ -173,7 +173,7 @@ async def apply_transfer(
         .values(
             user_id=user_id,
             account_id=to_account_id,
-            idempotency_key=f"{idempotency_key}:in",
+            idempotency_key=idempotency_key,
             payload_signature=signature,
             kind="credit",
             operation_type="transfer_in",

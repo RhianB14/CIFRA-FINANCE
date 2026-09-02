@@ -1,56 +1,5 @@
-import uuid
-from collections.abc import AsyncIterator
-
 import httpx
 import pytest
-import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.pool import NullPool
-
-from app.core.db import get_session
-from app.main import app
-
-DATABASE_URL = "postgresql+asyncpg://cifra:cifra_local_development@localhost:5432/cifra"
-ADMIN_DSN = "postgresql://cifra:cifra_local_development@localhost:5432/cifra"
-
-
-async def _register_and_login(http: httpx.AsyncClient) -> str:
-    email = f"tx-flow-{uuid.uuid4().hex[:10]}@example.com"
-    password = "Str0ng!Pass123"
-    response = await http.post(
-        "/auth/register",
-        json={"email": email, "name": "Tx Flow", "password": password},
-    )
-    assert response.status_code in (200, 201), response.text
-    login = await http.post(
-        "/auth/login",
-        data={"username": email, "password": password},
-    )
-    assert login.status_code == 200, login.text
-    return str(login.json()["access_token"])
-
-
-@pytest_asyncio.fixture
-async def tx_client(db_session: AsyncSession) -> AsyncIterator[httpx.AsyncClient]:
-    engine = create_async_engine(DATABASE_URL, poolclass=NullPool)
-    maker = None
-
-    from sqlalchemy.ext.asyncio import async_sessionmaker
-
-    maker = async_sessionmaker(engine, expire_on_commit=False)
-
-    async def _override() -> AsyncIterator[AsyncSession]:
-        async with maker() as session:
-            yield session
-
-    app.dependency_overrides[get_session] = _override
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
-        token = await _register_and_login(http)
-        http.headers["Authorization"] = f"Bearer {token}"
-        yield http
-    app.dependency_overrides.pop(get_session, None)
-    await engine.dispose()
 
 
 @pytest.mark.asyncio

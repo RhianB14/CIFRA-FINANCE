@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class TransactionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    idempotency_key: str = Field(min_length=1, max_length=255)
+    idempotency_key: str = Field(min_length=1, max_length=128)
     operation_type: str
     amount_cents: int = Field(gt=0)
     occurred_at: datetime
@@ -19,7 +19,7 @@ class TransactionCreate(BaseModel):
 class ReversalCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    idempotency_key: str = Field(min_length=1, max_length=255)
+    idempotency_key: str = Field(min_length=1, max_length=128)
     expected_version: int | None = Field(ge=0, default=None)
 
 
@@ -45,7 +45,7 @@ class TransactionOut(BaseModel):
 class TransferCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    idempotency_key: str = Field(min_length=1, max_length=255)
+    idempotency_key: str = Field(min_length=1, max_length=128)
     amount_cents: int = Field(gt=0)
     target_account_id: uuid.UUID
     occurred_at: datetime | None = None
