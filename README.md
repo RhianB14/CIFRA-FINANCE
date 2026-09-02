@@ -126,7 +126,7 @@ Todos os endpoints exigem Bearer e operam isolados por usuário via RLS (escopo 
 | `GET /accounts/{id}/attachments` | Lista anexos da conta |
 | `POST /accounts/{id}/attachments/{attachment}/download` | URL de download assinada, só do dono |
 
-O ledger é append-only (migração 0003/0004 com CHECKs e RLS); saldos versionados com locking otimista; categorias/tags via `/taxonomy` (CRUD + apply). O bucket de anexos é garantido no startup da API (`ensure_bucket` idempotente). Smoke E2E canônico: `scripts/f2_smoke.py` valida conta A = 1000 + 500 − 120 − 200 = **1180** e conta B = **200** (R$ 1.180,00 / R$ 200,00) contra a stack Docker real; `scripts/f2_smoke.py` requer `SMOKE_BASE_URL` (default `http://localhost:18000`).
+O ledger é append-only (migração 0003/0004 com CHECKs e RLS); saldos versionados com locking otimista; categorias/tags via `/taxonomy` (CRUD + apply). O drift entre os modelos SQLAlchemy e o schema das migrações é gate: `pnpm db:drift` (`uv run alembic check`) roda no `pnpm verify`, no job Test API do CI (após `up → down → up`) e como teste de integração (`tests/integration/test_metadata_drift_gate.py`), e exige exit 0 contra um banco migrado até o head. O bucket de anexos é garantido no startup da API (`ensure_bucket` idempotente). Smoke E2E canônico: `scripts/f2_smoke.py` valida conta A = 1000 + 500 − 120 − 200 = **1180** e conta B = **200** (R$ 1.180,00 / R$ 200,00) contra a stack Docker real; `scripts/f2_smoke.py` requer `SMOKE_BASE_URL` (default `http://localhost:18000`).
 
 ## Docker Compose
 
