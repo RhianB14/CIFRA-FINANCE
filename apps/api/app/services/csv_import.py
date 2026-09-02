@@ -26,10 +26,17 @@ class ImportResult:
     file_sha256: str
 
 
-def _idempotency_key(external_id: str | None, fingerprint: str, row_index: int) -> str:
-    if external_id:
-        return f"import:{external_id}"
-    return f"import:{fingerprint}:{row_index}"
+def _row_fingerprint(
+    occurred_at_raw: str,
+    amount_raw: str,
+    kind_raw: str,
+    description: str | None,
+    external_id: str | None,
+) -> str:
+    payload = "|".join(
+        [occurred_at_raw, amount_raw, kind_raw, description or "", external_id or ""]
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 async def import_csv(
@@ -87,10 +94,12 @@ async def import_csv(
             occurred_at = datetime.fromisoformat(occurred_at_raw.replace("Z", "+00:00"))
         except ValueError:
             raise ImportError_(f"row {index + 2}: invalid occurred_at") from None
-        fingerprint = hashlib.sha256(
-            ("|".join([occurred_at_raw, amount_raw, kind_raw, description or ""])).encode()
-        ).hexdigest()[:32]
-        key = _idempotency_key(external_id, fingerprint, index)
+        if external_id is not None and len(external_id) > 110:
+            raise ImportError_(f"row {index + 2}: external_id too long")
+        fingerprint = _row_fingerprint(
+            occurred_at_raw, amount_raw, kind_raw, description, external_id
+        )
+        key = f"import:{fingerprint}"
         operation = "deposit" if kind_raw == "credit" else "withdrawal"
         op_key = f"{key}:dep" if kind_raw == "credit" else f"{key}:wd"
         existing = await session.execute(
