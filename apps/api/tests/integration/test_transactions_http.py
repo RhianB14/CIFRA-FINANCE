@@ -155,3 +155,31 @@ async def test_transaction_unknown_fields_rejected(tx_client: httpx.AsyncClient)
         },
     )
     assert bad.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_transfer_route_moves_both_balances(tx_client: httpx.AsyncClient) -> None:
+    created = await tx_client.post(
+        "/accounts",
+        json={
+            "name": "Origem",
+            "kind": "checking",
+            "currency": "BRL",
+            "initial_balance_cents": 100000,
+        },
+    )
+    origin = created.json()["id"]
+    other = await tx_client.post(
+        "/accounts",
+        json={"name": "Destino", "kind": "checking", "currency": "BRL", "initial_balance_cents": 0},
+    )
+    target = other.json()["id"]
+    response = await tx_client.post(
+        f"/accounts/{origin}/transfers",
+        json={"idempotency_key": "tr-1", "amount_cents": 32000, "target_account_id": target},
+    )
+    assert response.status_code == 201, response.text
+    a = await tx_client.get(f"/accounts/{origin}/balance")
+    b = await tx_client.get(f"/accounts/{target}/balance")
+    assert a.json()["current_balance_cents"] == 68000
+    assert b.json()["current_balance_cents"] == 32000
