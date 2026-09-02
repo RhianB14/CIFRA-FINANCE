@@ -95,7 +95,7 @@ async def import_csv(
             occurred_at = datetime.fromisoformat(occurred_at_raw.replace("Z", "+00:00"))
         except ValueError:
             raise ImportError_(f"row {index + 2}: invalid occurred_at") from None
-        if external_id is not None and len(external_id) > 110:
+        if external_id is not None and len(external_id) > 255:
             raise ImportError_(f"row {index + 2}: external_id too long")
         fingerprint = _row_fingerprint(
             occurred_at_raw, amount_raw, kind_raw, description, external_id

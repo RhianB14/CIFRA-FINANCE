@@ -116,11 +116,35 @@ async def test_same_file_in_different_account_creates_new_batch(
 
 
 @pytest.mark.asyncio
-async def test_csv_external_id_overflowing_key_limit_is_domain_error(
+async def test_csv_external_id_up_to_255_is_accepted(
     tx_client: httpx.AsyncClient,
 ) -> None:
     account_id = await _create_account(tx_client)
-    long_id = "x" * 200
+    max_id = "x" * 255
+    response = await tx_client.post(
+        f"/accounts/{account_id}/imports",
+        files={
+            "file": (
+                "max.csv",
+                _csv([f"2026-09-01T10:00:00+00:00,500,credit,pagamento,{max_id}"]),
+            )
+        },
+        data={"source_name": "banco-x"},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["imported_count"] == 1
+
+    listing = await tx_client.get(f"/accounts/{account_id}/transactions")
+    assert listing.status_code == 200
+    assert len(listing.json()) == 1
+
+
+@pytest.mark.asyncio
+async def test_csv_external_id_over_255_is_domain_error(
+    tx_client: httpx.AsyncClient,
+) -> None:
+    account_id = await _create_account(tx_client)
+    long_id = "x" * 256
     response = await tx_client.post(
         f"/accounts/{account_id}/imports",
         files={
