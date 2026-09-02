@@ -6,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Account, Transaction, User
-from app.services.ledger import apply_ledger_movement
+from app.services.ledger import IdempotencyConflictError, apply_ledger_movement
 
 
 def occurred(hour: int, minute: int = 0) -> datetime:
@@ -57,19 +57,18 @@ async def test_movement_is_idempotent_and_balance_matches_invariant(
         occurred_at=occurred(10),
         description="entrada",
     )
-    conflicting = await apply_ledger_movement(
-        db_session,
-        account_id=account.id,
-        user_id=user.id,
-        idempotency_key="op-1",
-        operation_type="withdrawal",
-        amount_cents=50000,
-        occurred_at=occurred(10),
-        description="outro payload",
-    )
-
     assert first.transaction_id == replay.transaction_id
-    assert conflicting is None
+    with pytest.raises(IdempotencyConflictError):
+        await apply_ledger_movement(
+            db_session,
+            account_id=account.id,
+            user_id=user.id,
+            idempotency_key="op-1",
+            operation_type="withdrawal",
+            amount_cents=50000,
+            occurred_at=occurred(10),
+            description="outro payload",
+        )
 
     counted = await db_session.execute(
         text("SELECT COUNT(*) FROM transactions WHERE account_id = :account_id"),
