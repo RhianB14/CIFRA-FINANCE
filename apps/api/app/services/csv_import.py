@@ -77,10 +77,16 @@ async def import_csv(
         kind_raw = (row.get("kind") or "").strip().lower()
         if not occurred_at_raw or not amount_raw or kind_raw not in {"credit", "debit"}:
             raise ImportError_(f"row {index + 2}: invalid row")
-        amount_cents = int(amount_raw)
+        try:
+            amount_cents = int(amount_raw)
+        except ValueError:
+            raise ImportError_(f"row {index + 2}: invalid amount") from None
         if amount_cents <= 0:
             raise ImportError_(f"row {index + 2}: amount must be positive")
-        occurred_at = datetime.fromisoformat(occurred_at_raw.replace("Z", "+00:00"))
+        try:
+            occurred_at = datetime.fromisoformat(occurred_at_raw.replace("Z", "+00:00"))
+        except ValueError:
+            raise ImportError_(f"row {index + 2}: invalid occurred_at") from None
         fingerprint = hashlib.sha256(
             ("|".join([occurred_at_raw, amount_raw, kind_raw, description or ""])).encode()
         ).hexdigest()[:32]
