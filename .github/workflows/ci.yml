@@ -82,6 +82,7 @@ jobs:
     env:
       DATABASE_URL: postgresql+asyncpg://cifra:cifra_local_development@localhost:5432/cifra
       REDIS_URL: redis://localhost:6379/15
+      S3_ENDPOINT: http://localhost:9000
       ENVIRONMENT: test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -89,6 +90,21 @@ jobs:
         run: |
           echo "JWT_SIGNING_KEY=ci-$(openssl rand -hex 32)" >> "$GITHUB_ENV"
           echo "TOTP_ENCRYPTION_KEY=$(python3 -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
+      - name: start minio and create attachments bucket
+        run: |
+          docker run -d --name ci-minio --network host \
+            -e MINIO_ROOT_USER=cifra_local \
+            -e MINIO_ROOT_PASSWORD=cifra_local_development \
+            minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+          for i in $(seq 1 24); do
+            if curl -sf http://localhost:9000/minio/health/ready > /dev/null; then break; fi
+            sleep 5
+          done
+          curl -sf http://localhost:9000/minio/health/ready > /dev/null
+          docker run --rm --network host --entrypoint /bin/sh \
+            minio/minio:RELEASE.2025-09-07T16-13-09Z -c "
+            mc alias set local http://localhost:9000 cifra_local cifra_local_development &&
+            mc mb -p local/cifra-attachments"
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
           version: "11.24.0"
@@ -112,6 +128,8 @@ jobs:
           uv run alembic downgrade base
           uv run alembic upgrade head
         working-directory: apps/api
+      - name: check metadata drift
+        run: pnpm --filter @cifra/api db:drift
       - run: pnpm --filter @cifra/api test:coverage
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:

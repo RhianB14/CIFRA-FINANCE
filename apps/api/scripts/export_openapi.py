@@ -15,8 +15,25 @@ def build_spec() -> dict[str, object]:
     return app.openapi()
 
 
+def _quote_hash_leading_values(yaml_text: str) -> str:
+    out: list[str] = []
+    for line in yaml_text.splitlines():
+        stripped = line.lstrip()
+        if ": " in stripped:
+            key, _, value = stripped.partition(": ")
+            has_ref = "$ref" in key
+            if not has_ref and "#" in value and not (value.startswith('"') and value.endswith('"')):
+                prefix = line[: len(line) - len(stripped)]
+                escaped = value.replace('"', '\\"')
+                out.append(f'{prefix}{key}: "{escaped}"')
+                continue
+        out.append(line)
+    return "\n".join(out)
+
+
 def dumps_spec(spec: dict[str, object]) -> str:
-    return yaml.safe_dump(spec, sort_keys=True, default_flow_style=False, allow_unicode=True)
+    raw = yaml.safe_dump(spec, sort_keys=True, default_flow_style=False, allow_unicode=True)
+    return _quote_hash_leading_values(raw) + "\n"
 
 
 def main() -> int:

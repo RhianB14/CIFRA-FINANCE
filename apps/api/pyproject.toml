@@ -3,6 +3,7 @@ name = "cifra-api"
 version = "0.1.0"
 requires-python = "==3.11.*"
 dependencies = [
+  "aioboto3>=15.5.0",
   "alembic>=1.16,<2",
   "argon2-cffi>=25.1,<26",
   "asyncpg>=0.31.0,<1",
@@ -24,6 +25,7 @@ dependencies = [
 [dependency-groups]
 dev = [
   "asyncpg-stubs==0.31.1",
+  "hypothesis>=6.167.1",
   "mypy==1.19.1",
   "pip-audit==2.10.1",
   "pytest==9.1.1",
@@ -32,6 +34,10 @@ dev = [
   "ruff==0.16.5",
   "types-pyyaml>=6.0.12",
 ]
+
+[[tool.mypy.overrides]]
+module = ["aioboto3", "aiobotocore.*", "botocore.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

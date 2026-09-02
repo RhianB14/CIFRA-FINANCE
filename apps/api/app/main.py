@@ -5,13 +5,24 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.settings import cors_origins, ensure_secure_configuration, get_settings
+from app.routers.accounts import router as accounts_router
 from app.routers.auth import router as auth_router
 from app.routers.health import router as health_router
+from app.routers.taxonomy import router as taxonomy_router
+from app.routers.transactions import router as transactions_router
+from app.services.storage import ObjectStorage
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    ensure_secure_configuration(get_settings())
+    settings = get_settings()
+    ensure_secure_configuration(settings)
+    storage = ObjectStorage()
+    try:
+        await storage.ensure_bucket()
+    except Exception:
+        if settings.environment == "production":
+            raise
     yield
 
 
@@ -24,3 +35,6 @@ app.add_middleware(
 )
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(accounts_router)
+app.include_router(transactions_router)
+app.include_router(taxonomy_router)

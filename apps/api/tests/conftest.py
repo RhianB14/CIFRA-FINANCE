@@ -1,10 +1,13 @@
 import asyncio
 import os
+import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import asyncpg
+import httpx
 import pytest
+import pytest_asyncio
 import redis.asyncio as redis
 from alembic import command
 from alembic.config import Config
@@ -16,6 +19,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 API_ROOT = Path(__file__).resolve().parents[1]
 POSTGRES_HOST = os.environ.get("POSTGRES_HOST", "localhost")
@@ -105,6 +109,15 @@ async def db_session(migrated_engine: AsyncEngine) -> AsyncIterator[AsyncSession
         await admin_engine.dispose()
 
 
+@pytest.fixture(scope="session")
+async def storage_ready() -> AsyncIterator[None]:
+    from app.services.storage import ObjectStorage
+
+    storage = ObjectStorage()
+    await storage.ensure_bucket()
+    yield
+
+
 @pytest.fixture(autouse=True)
 async def _clean_rate_limit_keys() -> AsyncIterator[None]:
     client = redis.from_url(
@@ -122,3 +135,41 @@ async def _clean_rate_limit_keys() -> AsyncIterator[None]:
         if keys:
             await client.delete(*keys)
         await client.aclose()
+
+
+async def register_and_login(http: httpx.AsyncClient) -> str:
+    email = f"http-flow-{uuid.uuid4().hex[:10]}@example.com"
+    password = "Str0ng!Pass123"
+    response = await http.post(
+        "/auth/register",
+        json={"email": email, "name": "Http Flow", "password": password},
+    )
+    assert response.status_code in (200, 201), response.text
+    login = await http.post(
+        "/auth/login",
+        data={"username": email, "password": password},
+    )
+    assert login.status_code == 200, login.text
+    return str(login.json()["access_token"])
+
+
+@pytest_asyncio.fixture
+async def tx_client(db_session: AsyncSession) -> AsyncIterator[httpx.AsyncClient]:
+    engine = create_async_engine(async_url(PERSISTENCE_DB), poolclass=NullPool)
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def _override() -> AsyncIterator[AsyncSession]:
+        async with maker() as session:
+            yield session
+
+    from app.core.db import get_session
+    from app.main import app
+
+    app.dependency_overrides[get_session] = _override
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http:
+        token = await register_and_login(http)
+        http.headers["Authorization"] = f"Bearer {token}"
+        yield http
+    app.dependency_overrides.pop(get_session, None)
+    await engine.dispose()
