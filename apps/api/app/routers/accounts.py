@@ -1,15 +1,23 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import bind_current_user, get_session
-from app.models import Account, Transaction, User
+from app.models import (
+    Account,
+    AccountBalanceSnapshot,
+    ImportBatch,
+    Transaction,
+    User,
+)
 from app.routers.auth import get_current_user
 from app.schemas.accounts import AccountCreate, AccountOut, AccountUpdate, account_to_out
 from app.schemas.balance import AccountBalanceOut
+from app.schemas.imports import ImportBatchOut, SnapshotCreate, SnapshotOut
+from app.services.csv_import import ImportError_, import_csv
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -51,6 +59,88 @@ async def account_balance(
         current_balance_cents=current,
         projected_balance_cents=current + pending,
     )
+
+
+@router.post("/{account_id}/imports", response_model=ImportBatchOut, status_code=201)
+async def import_account_csv(
+    account_id: uuid.UUID,
+    user: CurrentUser,
+    session: DbSession,
+    file: Annotated[UploadFile, File(...)],
+    source_name: Annotated[str, Form(...)],
+) -> ImportBatchOut:
+    await bind_current_user(session, user.id)
+    await _owned_account(account_id, user.id, session)
+    content = await file.read()
+    try:
+        result = await import_csv(
+            session,
+            account_id=account_id,
+            user_id=user.id,
+            source_name=source_name,
+            file_name=file.filename or "upload.csv",
+            content=content,
+        )
+    except ImportError_ as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    batch = await session.get(ImportBatch, result.batch_id)
+    if batch is None:
+        raise HTTPException(status_code=500, detail="import batch missing")
+    return ImportBatchOut(
+        id=batch.id,
+        account_id=batch.account_id,
+        source_name=batch.source_name,
+        file_name=batch.file_name,
+        file_sha256=batch.file_sha256,
+        row_count=result.row_count,
+        imported_count=result.imported_count,
+        skipped_count=result.skipped_count,
+        created_at=batch.created_at,
+    )
+
+
+@router.post("/{account_id}/snapshots", response_model=SnapshotOut, status_code=201)
+async def create_snapshot(
+    account_id: uuid.UUID,
+    payload: SnapshotCreate,
+    user: CurrentUser,
+    session: DbSession,
+) -> SnapshotOut:
+    await bind_current_user(session, user.id)
+    account = await _owned_account(account_id, user.id, session)
+    ledger_balance = account.current_balance_cents
+    reported = payload.reported_balance_cents
+    difference = reported - ledger_balance
+    snapshot = AccountBalanceSnapshot(
+        user_id=user.id,
+        account_id=account_id,
+        reported_balance_cents=reported,
+        ledger_balance_cents=ledger_balance,
+        difference_cents=difference,
+        status="matched" if difference == 0 else "divergent",
+        note=payload.note,
+    )
+    session.add(snapshot)
+    await session.commit()
+    await session.refresh(snapshot)
+    return SnapshotOut.model_validate(snapshot)
+
+
+@router.get("/{account_id}/snapshots", response_model=list[SnapshotOut])
+async def list_snapshots(
+    account_id: uuid.UUID,
+    user: CurrentUser,
+    session: DbSession,
+) -> list[SnapshotOut]:
+    await bind_current_user(session, user.id)
+    await _owned_account(account_id, user.id, session)
+    rows = await session.execute(
+        select(AccountBalanceSnapshot)
+        .where(AccountBalanceSnapshot.account_id == account_id)
+        .order_by(AccountBalanceSnapshot.created_at.desc())
+    )
+    return [SnapshotOut.model_validate(s) for s in rows.scalars()]
 
 
 async def _owned_account(

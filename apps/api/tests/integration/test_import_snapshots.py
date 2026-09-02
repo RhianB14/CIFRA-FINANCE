@@ -1,5 +1,4 @@
 import hashlib
-import io
 import uuid
 from collections.abc import AsyncIterator
 
@@ -48,12 +47,13 @@ async def imp_client(db_session: AsyncSession) -> AsyncIterator[httpx.AsyncClien
 
 
 def _csv_payload() -> bytes:
-    buffer = io.StringIO()
-    buffer.write("external_id,occurred_at,description,amount_cents,kind\\n")
-    buffer.write("tx-001,2026-09-01T10:00:00Z,Salario,500000,credit\\n")
-    buffer.write("tx-002,2026-09-01T11:00:00Z,Mercado,12000,debit\\n")
-    buffer.write("tx-003,2026-09-02T12:00:00Z,Assinatura,2990,debit\\n")
-    return buffer.getvalue().encode("utf-8")
+    lines = [
+        "external_id,occurred_at,description,amount_cents,kind",
+        "tx-001,2026-09-01T10:00:00Z,Salario,500000,credit",
+        "tx-002,2026-09-01T11:00:00Z,Mercado,12000,debit",
+        "tx-003,2026-09-02T12:00:00Z,Assinatura,2990,debit",
+    ]
+    return ("\n".join(lines) + "\n").encode("utf-8")
 
 
 @pytest.mark.asyncio

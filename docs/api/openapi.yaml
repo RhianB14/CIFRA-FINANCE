@@ -118,6 +118,20 @@ components:
           title: Name
       title: AccountUpdate
       type: object
+    Body_import_account_csv_accounts__account_id__imports_post:
+      properties:
+        file:
+          contentMediaType: application/octet-stream
+          title: File
+          type: string
+        source_name:
+          title: Source Name
+          type: string
+      required:
+      - file
+      - source_name
+      title: Body_import_account_csv_accounts__account_id__imports_post
+      type: object
     Body_login_auth_login_post:
       properties:
         client_id:
@@ -294,6 +308,50 @@ components:
           type: array
       title: HTTPValidationError
       type: object
+    ImportBatchOut:
+      properties:
+        account_id:
+          format: uuid
+          title: Account Id
+          type: string
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        file_name:
+          title: File Name
+          type: string
+        file_sha256:
+          title: File Sha256
+          type: string
+        id:
+          format: uuid
+          title: Id
+          type: string
+        imported_count:
+          title: Imported Count
+          type: integer
+        row_count:
+          title: Row Count
+          type: integer
+        skipped_count:
+          title: Skipped Count
+          type: integer
+        source_name:
+          title: Source Name
+          type: string
+      required:
+      - id
+      - account_id
+      - source_name
+      - file_name
+      - file_sha256
+      - row_count
+      - imported_count
+      - skipped_count
+      - created_at
+      title: ImportBatchOut
+      type: object
     MeResponse:
       additionalProperties: false
       properties:
@@ -411,6 +469,65 @@ components:
       - otpauth_uri
       - qr_data_uri
       title: SetupTwoFactorResponse
+      type: object
+    SnapshotCreate:
+      additionalProperties: false
+      properties:
+        note:
+          anyOf:
+          - maxLength: 500
+            minLength: 1
+            type: string
+          - type: 'null'
+          title: Note
+        reported_balance_cents:
+          title: Reported Balance Cents
+          type: integer
+      required:
+      - reported_balance_cents
+      title: SnapshotCreate
+      type: object
+    SnapshotOut:
+      properties:
+        account_id:
+          format: uuid
+          title: Account Id
+          type: string
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        difference_cents:
+          title: Difference Cents
+          type: integer
+        id:
+          format: uuid
+          title: Id
+          type: string
+        ledger_balance_cents:
+          title: Ledger Balance Cents
+          type: integer
+        note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Note
+        reported_balance_cents:
+          title: Reported Balance Cents
+          type: integer
+        status:
+          title: Status
+          type: string
+      required:
+      - id
+      - account_id
+      - reported_balance_cents
+      - ledger_balance_cents
+      - difference_cents
+      - status
+      - note
+      - created_at
+      title: SnapshotOut
       type: object
     TagCreate:
       additionalProperties: false
@@ -821,6 +938,107 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Account Balance
+      tags:
+      - accounts
+  /accounts/{account_id}/imports:
+    post:
+      operationId: import_account_csv_accounts__account_id__imports_post
+      parameters:
+      - in: path
+        name: account_id
+        required: true
+        schema:
+          format: uuid
+          title: Account Id
+          type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_import_account_csv_accounts__account_id__imports_post'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportBatchOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Import Account Csv
+      tags:
+      - accounts
+  /accounts/{account_id}/snapshots:
+    get:
+      operationId: list_snapshots_accounts__account_id__snapshots_get
+      parameters:
+      - in: path
+        name: account_id
+        required: true
+        schema:
+          format: uuid
+          title: Account Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/SnapshotOut'
+                title: Response List Snapshots Accounts  Account Id  Snapshots Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Snapshots
+      tags:
+      - accounts
+    post:
+      operationId: create_snapshot_accounts__account_id__snapshots_post
+      parameters:
+      - in: path
+        name: account_id
+        required: true
+        schema:
+          format: uuid
+          title: Account Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SnapshotCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Create Snapshot
       tags:
       - accounts
   /accounts/{account_id}/transactions:
