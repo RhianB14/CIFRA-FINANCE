@@ -7,7 +7,8 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from app.models import Account, User
+from app.models import Account, CreditCard, User
+from app.services.cards import close_card_invoices
 from app.services.recurring import materialize_recurring as materialize_recurring
 from app.services.scheduled import promote_due as promote_due
 
@@ -23,6 +24,7 @@ class DailyJobResult:
     created: int
     replayed: int
     paused: int
+    invoices_closed: int
     accounts_scanned: int
     users_scanned: int
     errors: list[str] = field(default_factory=list)
@@ -38,6 +40,7 @@ class DailyJobResult:
                 "created": self.created,
                 "replayed": self.replayed,
                 "paused": self.paused,
+                "invoices_closed": self.invoices_closed,
                 "accounts_scanned": self.accounts_scanned,
                 "users_scanned": self.users_scanned,
                 "error_count": len(self.errors),
@@ -70,6 +73,7 @@ async def run_daily_job(
     created_total = 0
     replayed_total = 0
     paused_total = 0
+    invoices_closed_total = 0
     accounts_scanned = 0
     users_scanned = 0
     status = "completed"
@@ -90,6 +94,7 @@ async def run_daily_job(
                 created=0,
                 replayed=0,
                 paused=0,
+                invoices_closed=0,
                 accounts_scanned=0,
                 users_scanned=0,
                 errors=[],
@@ -130,6 +135,28 @@ async def run_daily_job(
                 )
                 user_ids = [row[0] for row in user_rows.all()]
 
+            async with session_factory() as scope:
+                await _set_bypass(scope)
+                card_rows = await scope.execute(
+                    select(CreditCard.id)
+                    .where(CreditCard.archived_at.is_(None))
+                    .order_by(CreditCard.created_at, CreditCard.id)
+                )
+                card_ids = [row[0] for row in card_rows.all()]
+
+            for card_id in card_ids:
+                try:
+                    async with session_factory() as session:
+                        await _set_bypass(session)
+                        card = await session.get(CreditCard, card_id)
+                        if card is None:
+                            continue
+                        closed = await close_card_invoices(session, card, now.date())
+                        await session.commit()
+                        invoices_closed_total += closed
+                except Exception as exc:
+                    errors.append(_sanitize_error("card", card_id, exc))
+
             for user_id in user_ids:
                 users_scanned += 1
                 try:
@@ -160,6 +187,7 @@ async def run_daily_job(
         created=created_total,
         replayed=replayed_total,
         paused=paused_total,
+        invoices_closed=invoices_closed_total,
         accounts_scanned=accounts_scanned,
         users_scanned=users_scanned,
         errors=errors,

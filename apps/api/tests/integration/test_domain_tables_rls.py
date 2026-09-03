@@ -9,6 +9,9 @@ DOMAIN_TABLES = (
     "tags",
     "import_batches",
     "account_balance_snapshots",
+    "credit_cards",
+    "card_invoices",
+    "invoice_payments",
 )
 
 
