@@ -10,11 +10,11 @@ Registro oficial das excecoes aplicadas aos scanners de vulnerabilidade. Toda ex
 - Responsavel pela reavaliacao: Rhian Batista.
 - Condicao de remocao: publicacao de release do MinIO com correcao aplicavel. Ao sair, remover os CVEs corrigidos do `.trivyignore-minio`, atualizar a tag em `docker-compose.yml`, rebuild e re-scan zerado.
 
-## MinIO `RELEASE.2025-09-07T16-13-09Z` (54 excecoes)
+## MinIO `RELEASE.2025-09-07T16-13-09Z` (55 excecoes)
 
 - Motivo: `RELEASE.2025-09-07T16-13-09Z` e a ultima tag publicada no Docker Hub do `minio/minio` (verificado via API do Docker Hub em 2026-08-30). As vulnerabilidades afetam componentes internos da imagem (golang.org/x/crypto, golang.org/x/net, grpc, stdlib Go, jwt-go, thrift, prometheus, libacl) sem pacote substituivel dentro da imagem.
 - Prova de ausencia de correcao aplicavel: a API do Docker Hub nao retorna tag mais recente para `minio/minio`; nao existe release upstream que incorpore as correcoes; rebuild do binario do MinIO nao e viavel por ser imagem fechada do fornecedor.
-- Impacto: 4 CRITICAL e 50 HIGH.
+- Impacto: 4 CRITICAL e 51 HIGH.
 - Risco aceito: armazenamento de objetos em rede interna do compose, sem exposicao a Internet, credenciais locais ficticias, dados de desenvolvimento.
 
 | CVE/GHSA | Severidade | Componente |
@@ -23,6 +23,7 @@ Registro oficial das excecoes aplicadas aos scanners de vulnerabilidade. Toda ex
 | CVE-2026-33186 | CRITICAL | google.golang.org/grpc |
 | CVE-2026-33322 | CRITICAL | github.com/minio/minio |
 | CVE-2026-33419 | CRITICAL | github.com/minio/minio |
+| CVE-2026-43871 | HIGH | github.com/apache/thrift |
 | CVE-2025-47913 | HIGH | golang.org/x/crypto |
 | CVE-2025-61726 | HIGH | stdlib |
 | CVE-2025-61729 | HIGH | stdlib |

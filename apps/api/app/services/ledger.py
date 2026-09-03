@@ -12,6 +12,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Account, Transaction
 
 
+def payload_signature(
+    operation_type: str,
+    amount_cents: int,
+    occurred_at: datetime,
+    description: str | None,
+    external_id: str | None,
+    fingerprint: str | None,
+    reverses_transaction_id: UUID | None,
+) -> str:
+    payload = json.dumps(
+        {
+            "operation_type": operation_type,
+            "amount_cents": amount_cents,
+            "occurred_at": occurred_at.isoformat(),
+            "description": description,
+            "external_id": external_id,
+            "fingerprint": fingerprint,
+            "reverses_transaction_id": (
+                str(reverses_transaction_id) if reverses_transaction_id else None
+            ),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class LedgerResult:
     transaction_id: UUID
@@ -91,6 +118,8 @@ async def apply_transfer(
         raise LedgerError("source account not found for owner")
     if to_account is None or to_account.user_id != user_id:
         raise LedgerError("destination account not found for owner")
+    if from_account.currency != to_account.currency:
+        raise LedgerError("transfer requires accounts with the same currency (ADR 0002: no FX)")
 
     signature = _payload_signature(
         "transfer",
@@ -336,22 +365,15 @@ def _payload_signature(
     fingerprint: str | None,
     reverses_transaction_id: UUID | None,
 ) -> str:
-    payload = json.dumps(
-        {
-            "operation_type": operation_type,
-            "amount_cents": amount_cents,
-            "occurred_at": occurred_at.isoformat(),
-            "description": description,
-            "external_id": external_id,
-            "fingerprint": fingerprint,
-            "reverses_transaction_id": (
-                str(reverses_transaction_id) if reverses_transaction_id else None
-            ),
-        },
-        sort_keys=True,
-        separators=(",", ":"),
+    return payload_signature(
+        operation_type,
+        amount_cents,
+        occurred_at,
+        description,
+        external_id,
+        fingerprint,
+        reverses_transaction_id,
     )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 async def _existing_result(

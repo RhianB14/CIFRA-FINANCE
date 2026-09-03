@@ -287,11 +287,11 @@ Rede de segurança antes de tocar em domínio.
 
 ### Fase 3 — Transferências, agendados, recorrências e dashboard · ~1.5 sessões (~4.5h)
 
-- [ ] Endpoint de transferência (única DB transaction criando o par)
-- [ ] **Agendados**: criar transaction com `status=pending` e `date` futura; job diário promove a `posted` no dia
-- [ ] **Recorrências**: CRUD de `recurring_transactions`; job diário materializa lançamentos com `next_run_on <= today`
-- [ ] Dashboard: saldo total consolidado (por moeda), por conta, fluxo do mês, próximos agendados, últimos lançamentos
-- [ ] Gráfico de evolução (recharts) e comparativo mês a mês
+- [x] Endpoint de transferência (única DB transaction criando o par)
+- [x] **Agendados**: criar transaction com `status=pending` e `date` futura; job diário promove a `posted` no dia
+- [x] **Recorrências**: CRUD de `recurring_transactions`; job diário materializa lançamentos com `next_run_on <= today`
+- [x] Dashboard: saldo total consolidado (por moeda), por conta, fluxo do mês, próximos agendados, últimos lançamentos
+- [x] Gráfico de evolução (recharts) e comparativo mês a mês
 - **Aceite:** transferência reflete nos 2 saldos; recorrência mensal dia 5 gera lançamento em três meses simulados; agendado do dia 30 vira posted quando o job roda com data > 30.
 
 ### Fase 4 — Cartões de crédito, faturas e parcelamento · ~2.5 sessões (~7.5h)

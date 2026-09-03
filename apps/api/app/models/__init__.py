@@ -1,11 +1,13 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import (
     CHAR,
     BigInteger,
+    Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -346,4 +348,48 @@ class AccountBalanceSnapshot(Base):
             "status IN ('matched', 'divergent')",
             name="account_balance_snapshots_status_allowed",
         ),
+    )
+
+
+class RecurringTransaction(Base):
+    __tablename__ = "recurring_transactions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    account_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False
+    )
+    template_operation_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    template_amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    template_description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    recurrence: Mapped[str] = mapped_column(String(10), nullable=False)
+    starts_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ends_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    next_run_on: Mapped[date] = mapped_column(Date, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("template_amount_cents > 0", name="recurring_amount_positive"),
+        CheckConstraint(
+            "recurrence IN ('daily', 'weekly', 'monthly', 'yearly')",
+            name="recurring_cadence_allowed",
+        ),
+        CheckConstraint(
+            "template_operation_type IN ('deposit', 'withdrawal')",
+            name="recurring_operations_allowed",
+        ),
+        CheckConstraint(
+            "ends_on IS NULL OR ends_on >= starts_on",
+            name="recurring_dates_sane",
+        ),
+        Index("ix_recurring_user_next_run", "user_id", "next_run_on"),
+        Index("ix_recurring_account_id", "account_id"),
     )

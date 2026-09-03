@@ -128,6 +128,21 @@ Todos os endpoints exigem Bearer e operam isolados por usuário via RLS (escopo 
 
 O ledger é append-only (migração 0003/0004 com CHECKs e RLS); saldos versionados com locking otimista; categorias/tags via `/taxonomy` (CRUD + apply). O drift entre os modelos SQLAlchemy e o schema das migrações é gate: `pnpm db:drift` (`uv run alembic check`) roda no `pnpm verify`, no job Test API do CI (após `up → down → up`) e como teste de integração (`tests/integration/test_metadata_drift_gate.py`), e exige exit 0 contra um banco migrado até o head. O bucket de anexos é garantido no startup da API (`ensure_bucket` idempotente). Smoke E2E canônico: `scripts/f2_smoke.py` valida conta A = 1000 + 500 − 120 − 200 = **1180** e conta B = **200** (R$ 1.180,00 / R$ 200,00) contra a stack Docker real; `scripts/f2_smoke.py` requer `SMOKE_BASE_URL` (default `http://localhost:18000`).
 
+## Agendados, recorrências e dashboard (F3)
+
+Lançamentos com `occurred_at` futuro são criados com `status=pending` e não afetam o saldo posted; o job diário (`app/services/scheduled.py`, `promote_due`) promove vencidos para `posted` de forma transacional, idempotente e segura sob execução concorrente (lock por conta + re-leitura `FOR UPDATE`), com data/relógio injetável para testes. O trigger append-only evoluiu (migração 0011) para uma allowlist: a única transição permitida é `pending → posted`, e somente com identidade e payload intactos.
+
+Recorrências (`recurring_transactions`, migração 0012) têm CRUD completo em `/recurring` com RLS `ENABLE` + `FORCE` e isolamento por usuário. Cadências `daily|weekly|monthly|yearly` com `starts_on`, `ends_on` opcional, `next_run_on` e flag ativo. O calendário é determinístico: mês avança por calendário (nunca 30 dias), dia inexistente ancora no último dia do mês, 29 de fevereiro existe apenas em bissextos. O job (`materialize_recurring`) materializa todas as ocorrências com `next_run_on <= today` (inclusive períodos perdidos), com idempotência determinística por ocorrência (`recurring:{id}:{date}`, ≤128) e proteção por lock de conta — rerun e execução concorrente não duplicam.
+
+| Endpoint | Função |
+|---|---|
+| `GET /dashboard/summary?month=YYYY-MM` | Saldos consolidados **por moeda** (posted e projetado), fluxo do mês, saldos por conta, próximos agendados e últimos lançamentos |
+| `GET /dashboard/evolution?months=N&until=YYYY-MM` | Série de evolução mensal por moeda (entradas, saídas, saldo final acumulado) |
+| `GET /dashboard/month-comparison?month=YYYY-MM` | Comparativo mês atual vs anterior por moeda, com deltas |
+| `POST /recurring-transactions` / `GET /recurring-transactions` / `GET /recurring-transactions/{id}` / `PATCH /recurring-transactions/{id}` / `DELETE /recurring-transactions/{id}` | CRUD de recorrências (RLS, isolado por usuário) |
+
+O dashboard web (`/dashboard`) renderiza saldos por moeda (nunca somados), fluxo do mês, contas, próximos agendados, últimos lançamentos, gráfico de evolução e comparativo (Recharts), com estados de loading, vazio e erro, acessibilidade e formatação `pt-BR`. Smoke E2E da fase: `scripts/f3_smoke.py` (agendado pendente, promoção, recorrência dia 5, dashboard por moeda).
+
 ## Docker Compose
 
 No PowerShell:

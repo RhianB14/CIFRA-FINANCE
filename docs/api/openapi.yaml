@@ -1,22 +1,5 @@
 components:
   schemas:
-    AccountBalanceOut:
-      properties:
-        account_id:
-          title: Account Id
-          type: string
-        current_balance_cents:
-          title: Current Balance Cents
-          type: integer
-        projected_balance_cents:
-          title: Projected Balance Cents
-          type: integer
-      required:
-      - account_id
-      - current_balance_cents
-      - projected_balance_cents
-      title: AccountBalanceOut
-      type: object
     AccountCreate:
       additionalProperties: false
       properties:
@@ -311,6 +294,70 @@ components:
       - code
       title: ChallengeRequest
       type: object
+    ComparisonOut:
+      properties:
+        current_month:
+          title: Current Month
+          type: string
+        previous_month:
+          title: Previous Month
+          type: string
+        rows:
+          items:
+            $ref: '#/components/schemas/ComparisonRowOut'
+          title: Rows
+          type: array
+      required:
+      - current_month
+      - previous_month
+      - rows
+      title: ComparisonOut
+      type: object
+    ComparisonRowOut:
+      properties:
+        currency:
+          title: Currency
+          type: string
+        current_expense_cents:
+          title: Current Expense Cents
+          type: integer
+        current_income_cents:
+          title: Current Income Cents
+          type: integer
+        current_net_cents:
+          title: Current Net Cents
+          type: integer
+        delta_expense_cents:
+          title: Delta Expense Cents
+          type: integer
+        delta_income_cents:
+          title: Delta Income Cents
+          type: integer
+        delta_net_cents:
+          title: Delta Net Cents
+          type: integer
+        previous_expense_cents:
+          title: Previous Expense Cents
+          type: integer
+        previous_income_cents:
+          title: Previous Income Cents
+          type: integer
+        previous_net_cents:
+          title: Previous Net Cents
+          type: integer
+      required:
+      - currency
+      - current_income_cents
+      - current_expense_cents
+      - current_net_cents
+      - previous_income_cents
+      - previous_expense_cents
+      - previous_net_cents
+      - delta_income_cents
+      - delta_expense_cents
+      - delta_net_cents
+      title: ComparisonRowOut
+      type: object
     ConfirmTwoFactorRequest:
       additionalProperties: false
       properties:
@@ -322,6 +369,23 @@ components:
       required:
       - code
       title: ConfirmTwoFactorRequest
+      type: object
+    CurrencyBalanceOut:
+      properties:
+        currency:
+          title: Currency
+          type: string
+        posted_balance_cents:
+          title: Posted Balance Cents
+          type: integer
+        projected_balance_cents:
+          title: Projected Balance Cents
+          type: integer
+      required:
+      - currency
+      - posted_balance_cents
+      - projected_balance_cents
+      title: CurrencyBalanceOut
       type: object
     DisableTwoFactorRequest:
       additionalProperties: false
@@ -340,6 +404,31 @@ components:
       - password
       - code
       title: DisableTwoFactorRequest
+      type: object
+    EvolutionOut:
+      properties:
+        currency:
+          title: Currency
+          type: string
+        end_balance_cents:
+          title: End Balance Cents
+          type: integer
+        expense_cents:
+          title: Expense Cents
+          type: integer
+        income_cents:
+          title: Income Cents
+          type: integer
+        month:
+          title: Month
+          type: string
+      required:
+      - currency
+      - month
+      - income_cents
+      - expense_cents
+      - end_balance_cents
+      title: EvolutionOut
       type: object
     HTTPValidationError:
       properties:
@@ -418,6 +507,31 @@ components:
       - totp_enabled
       title: MeResponse
       type: object
+    MonthFlowOut:
+      properties:
+        currency:
+          title: Currency
+          type: string
+        expense_cents:
+          title: Expense Cents
+          type: integer
+        income_cents:
+          title: Income Cents
+          type: integer
+        month:
+          title: Month
+          type: string
+        net_cents:
+          title: Net Cents
+          type: integer
+      required:
+      - currency
+      - month
+      - income_cents
+      - expense_cents
+      - net_cents
+      title: MonthFlowOut
+      type: object
     PasswordRecoveryRequest:
       additionalProperties: false
       properties:
@@ -446,6 +560,164 @@ components:
       - token
       - new_password
       title: PasswordResetRequest
+      type: object
+    RecentOut:
+      properties:
+        account_id:
+          format: uuid
+          title: Account Id
+          type: string
+        amount_cents:
+          title: Amount Cents
+          type: integer
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        id:
+          format: uuid
+          title: Id
+          type: string
+        occurred_at:
+          title: Occurred At
+          type: string
+        operation_type:
+          title: Operation Type
+          type: string
+        status:
+          title: Status
+          type: string
+      required:
+      - id
+      - account_id
+      - operation_type
+      - status
+      - amount_cents
+      - occurred_at
+      - description
+      title: RecentOut
+      type: object
+    RecurringCreate:
+      additionalProperties: false
+      properties:
+        account_id:
+          format: uuid
+          title: Account Id
+          type: string
+        ends_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          title: Ends On
+        recurrence:
+          pattern: ^(daily|weekly|monthly|yearly)$
+          title: Recurrence
+          type: string
+        starts_on:
+          format: date
+          title: Starts On
+          type: string
+        template_amount_cents:
+          exclusiveMinimum: 0.0
+          title: Template Amount Cents
+          type: integer
+        template_description:
+          anyOf:
+          - maxLength: 500
+            minLength: 1
+            type: string
+          - type: 'null'
+          title: Template Description
+        template_operation_type:
+          pattern: ^(deposit|withdrawal)$
+          title: Template Operation Type
+          type: string
+      required:
+      - account_id
+      - template_operation_type
+      - template_amount_cents
+      - recurrence
+      - starts_on
+      title: RecurringCreate
+      type: object
+    RecurringOut:
+      properties:
+        account_id:
+          format: uuid
+          title: Account Id
+          type: string
+        ends_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          title: Ends On
+        id:
+          format: uuid
+          title: Id
+          type: string
+        is_active:
+          title: Is Active
+          type: boolean
+        next_run_on:
+          format: date
+          title: Next Run On
+          type: string
+        recurrence:
+          title: Recurrence
+          type: string
+        starts_on:
+          format: date
+          title: Starts On
+          type: string
+        template_amount_cents:
+          title: Template Amount Cents
+          type: integer
+        template_description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Template Description
+        template_operation_type:
+          title: Template Operation Type
+          type: string
+      required:
+      - id
+      - account_id
+      - template_operation_type
+      - template_amount_cents
+      - template_description
+      - recurrence
+      - starts_on
+      - ends_on
+      - next_run_on
+      - is_active
+      title: RecurringOut
+      type: object
+    RecurringPatch:
+      additionalProperties: false
+      properties:
+        ends_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          title: Ends On
+        is_active:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Active
+        template_description:
+          anyOf:
+          - maxLength: 500
+            minLength: 1
+            type: string
+          - type: 'null'
+          title: Template Description
+      title: RecurringPatch
       type: object
     RefreshRequest:
       additionalProperties: false
@@ -570,6 +842,45 @@ components:
       - note
       - created_at
       title: SnapshotOut
+      type: object
+    SummaryOut:
+      properties:
+        accounts:
+          items:
+            $ref: '#/components/schemas/app__routers__dashboard__AccountBalanceOut'
+          title: Accounts
+          type: array
+        consolidated_by_currency:
+          items:
+            $ref: '#/components/schemas/CurrencyBalanceOut'
+          title: Consolidated By Currency
+          type: array
+        month:
+          title: Month
+          type: string
+        month_flow:
+          items:
+            $ref: '#/components/schemas/MonthFlowOut'
+          title: Month Flow
+          type: array
+        recent:
+          items:
+            $ref: '#/components/schemas/RecentOut'
+          title: Recent
+          type: array
+        upcoming:
+          items:
+            $ref: '#/components/schemas/UpcomingOut'
+          title: Upcoming
+          type: array
+      required:
+      - month
+      - consolidated_by_currency
+      - month_flow
+      - accounts
+      - upcoming
+      - recent
+      title: SummaryOut
       type: object
     TagCreate:
       additionalProperties: false
@@ -785,6 +1096,43 @@ components:
       - challenge_id
       title: TwoFactorChallengeResponse
       type: object
+    UpcomingOut:
+      properties:
+        account_id:
+          format: uuid
+          title: Account Id
+          type: string
+        amount_cents:
+          title: Amount Cents
+          type: integer
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        id:
+          format: uuid
+          title: Id
+          type: string
+        occurred_at:
+          title: Occurred At
+          type: string
+        operation_type:
+          title: Operation Type
+          type: string
+        status:
+          title: Status
+          type: string
+      required:
+      - id
+      - account_id
+      - operation_type
+      - status
+      - amount_cents
+      - occurred_at
+      - description
+      title: UpcomingOut
+      type: object
     ValidationError:
       properties:
         ctx:
@@ -830,6 +1178,53 @@ components:
       - refresh_token
       - backup_codes
       title: VerifyTwoFactorResponse
+      type: object
+    app__routers__dashboard__AccountBalanceOut:
+      properties:
+        account_id:
+          format: uuid
+          title: Account Id
+          type: string
+        currency:
+          title: Currency
+          type: string
+        kind:
+          title: Kind
+          type: string
+        name:
+          title: Name
+          type: string
+        posted_balance_cents:
+          title: Posted Balance Cents
+          type: integer
+        projected_balance_cents:
+          title: Projected Balance Cents
+          type: integer
+      required:
+      - account_id
+      - name
+      - currency
+      - kind
+      - posted_balance_cents
+      - projected_balance_cents
+      title: AccountBalanceOut
+      type: object
+    app__schemas__balance__AccountBalanceOut:
+      properties:
+        account_id:
+          title: Account Id
+          type: string
+        current_balance_cents:
+          title: Current Balance Cents
+          type: integer
+        projected_balance_cents:
+          title: Projected Balance Cents
+          type: integer
+      required:
+      - account_id
+      - current_balance_cents
+      - projected_balance_cents
+      title: AccountBalanceOut
       type: object
   securitySchemes:
     OAuth2PasswordBearer:
@@ -1067,7 +1462,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AccountBalanceOut'
+                $ref: '#/components/schemas/app__schemas__balance__AccountBalanceOut'
           description: Successful Response
         '422':
           content:
@@ -1713,6 +2108,108 @@ paths:
       summary: Update Category
       tags:
       - taxonomy
+  /dashboard/evolution:
+    get:
+      operationId: evolution_route_dashboard_evolution_get
+      parameters:
+      - in: query
+        name: months
+        required: false
+        schema:
+          default: 6
+          maximum: 24
+          minimum: 1
+          title: Months
+          type: integer
+      - in: query
+        name: until
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Until
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/EvolutionOut'
+                title: Response Evolution Route Dashboard Evolution Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Evolution Route
+      tags:
+      - dashboard
+  /dashboard/month-comparison:
+    get:
+      operationId: comparison_route_dashboard_month_comparison_get
+      parameters:
+      - in: query
+        name: month
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Month
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComparisonOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Comparison Route
+      tags:
+      - dashboard
+  /dashboard/summary:
+    get:
+      operationId: summary_route_dashboard_summary_get
+      parameters:
+      - in: query
+        name: month
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Month
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummaryOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Summary Route
+      tags:
+      - dashboard
   /health/live:
     get:
       operationId: live_health_live_get
@@ -1749,6 +2246,137 @@ paths:
       summary: Ready
       tags:
       - health
+  /recurring-transactions:
+    get:
+      operationId: list_recurring_route_recurring_transactions_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/RecurringOut'
+                title: Response List Recurring Route Recurring Transactions Get
+                type: array
+          description: Successful Response
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Recurring Route
+      tags:
+      - recurring-transactions
+    post:
+      operationId: create_recurring_route_recurring_transactions_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecurringCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Create Recurring Route
+      tags:
+      - recurring-transactions
+  /recurring-transactions/{recurring_id}:
+    delete:
+      operationId: delete_recurring_route_recurring_transactions__recurring_id__delete
+      parameters:
+      - in: path
+        name: recurring_id
+        required: true
+        schema:
+          format: uuid
+          title: Recurring Id
+          type: string
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Delete Recurring Route
+      tags:
+      - recurring-transactions
+    get:
+      operationId: get_recurring_route_recurring_transactions__recurring_id__get
+      parameters:
+      - in: path
+        name: recurring_id
+        required: true
+        schema:
+          format: uuid
+          title: Recurring Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Get Recurring Route
+      tags:
+      - recurring-transactions
+    patch:
+      operationId: patch_recurring_route_recurring_transactions__recurring_id__patch
+      parameters:
+      - in: path
+        name: recurring_id
+        required: true
+        schema:
+          format: uuid
+          title: Recurring Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecurringPatch'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecurringOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Patch Recurring Route
+      tags:
+      - recurring-transactions
   /tags:
     get:
       operationId: list_tags_tags_get
