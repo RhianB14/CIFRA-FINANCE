@@ -25,6 +25,6 @@ describe("HomeScreen", () => {
     await render(<HomeScreen />);
 
     expect(mockCreateApiClient).toHaveBeenCalledTimes(1);
-    expect(mockCreateApiClient).toHaveBeenCalledWith({ baseUrl: "http://10.0.2.2:8000" });
+    expect(mockCreateApiClient).toHaveBeenCalledWith({ baseUrl: "http://localhost:18000" });
   });
 });
