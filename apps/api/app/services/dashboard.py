@@ -236,13 +236,17 @@ async def _flows_per_currency(
 async def _pending_per_account(
     session: AsyncSession,
     user_id: UUID,
+    account_ids: set[UUID] | None = None,
 ) -> dict[UUID, int]:
+    conditions = [
+        Transaction.user_id == user_id,
+        Transaction.status == "pending",
+    ]
+    if account_ids is not None:
+        conditions.append(Transaction.account_id.in_(account_ids))
     rows = await session.execute(
         select(Transaction.account_id, Transaction.kind, func.sum(Transaction.amount_cents))
-        .where(
-            Transaction.user_id == user_id,
-            Transaction.status == "pending",
-        )
+        .where(*conditions)
         .group_by(Transaction.account_id, Transaction.kind)
     )
     totals: dict[UUID, int] = {}
@@ -262,7 +266,7 @@ async def dashboard_summary(
     flows = await _flows_per_account(
         session, user_id, month_start, month_end, account_ids=active_ids
     )
-    pending = await _pending_per_account(session, user_id)
+    pending = await _pending_per_account(session, user_id, account_ids=active_ids)
 
     currency_posted: dict[str, int] = {}
     currency_projected: dict[str, int] = {}
@@ -314,7 +318,11 @@ async def dashboard_summary(
 
     upcoming_rows = await session.execute(
         select(Transaction)
-        .where(Transaction.user_id == user_id, Transaction.status == "pending")
+        .where(
+            Transaction.user_id == user_id,
+            Transaction.status == "pending",
+            Transaction.account_id.in_(active_ids),
+        )
         .order_by(Transaction.occurred_at, Transaction.created_at)
         .limit(10)
     )
@@ -332,7 +340,11 @@ async def dashboard_summary(
 
     recent_rows = await session.execute(
         select(Transaction)
-        .where(Transaction.user_id == user_id, Transaction.status == "posted")
+        .where(
+            Transaction.user_id == user_id,
+            Transaction.status == "posted",
+            Transaction.account_id.in_(active_ids),
+        )
         .order_by(Transaction.occurred_at.desc(), Transaction.created_at.desc())
         .limit(10)
     )

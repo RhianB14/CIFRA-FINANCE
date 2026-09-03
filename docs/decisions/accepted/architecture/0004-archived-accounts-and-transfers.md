@@ -25,10 +25,12 @@ não conseguia prever o que o dashboard mostrava após arquivar. Em paralelo, as
 ## Decision
 
 1. **Conta arquivada** (`archived_at` definido): deixa de aparecer em `accounts`,
-   `consolidated_by_currency`, `month_flow`, `evolution` e `month-comparison` a partir
-   do arquivamento, em qualquer moeda. Lançamentos históricos permanecem no ledger
-   (append-only) e nas listas de transações por conta; a conta pode ser desarquivada,
-   e todo o histórico volta a aparecer no dashboard imediatamente.
+   `consolidated_by_currency`, `month_flow`, `evolution`, `month-comparison`,
+   `upcoming` e `recent` a partir do arquivamento, em qualquer moeda. Ou seja,
+   `upcoming` e `recent` refletem apenas lançamentos de contas ativas; lançamentos
+   históricos permanecem no ledger (append-only) e nas listas de transações por
+   conta; a conta pode ser desarquivada, e todo o histórico volta a aparecer no
+   dashboard imediatamente.
 2. **Transferências internas**: pernas `transfer_in`/`transfer_out` entre contas do
    mesmo usuário são sempre excluídas de income/expense; afetam apenas saldos por
    conta/moeda e a evolução (via net movement, quando permanecerem ativas).

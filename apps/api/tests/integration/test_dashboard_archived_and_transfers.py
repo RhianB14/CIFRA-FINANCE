@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -240,3 +241,62 @@ async def test_internal_transfer_same_currency_excluded_too(
     balances = {item["account_id"]: item for item in body["accounts"]}
     assert balances[main_id]["posted_balance_cents"] == 70000
     assert balances[second_id]["posted_balance_cents"] == 30000
+
+
+@pytest.mark.asyncio
+async def test_archived_account_excluded_from_upcoming_and_recent(
+    tx_client: httpx.AsyncClient,
+) -> None:
+    accounts = await _setup_accounts(tx_client)
+    active_id = accounts["usd"]
+    archived_id = accounts["brl"]
+
+    await _post(tx_client, archived_id, "deposit", 40000, "2026-07-01T12:00:00Z")
+    scheduled = await tx_client.post(
+        f"/accounts/{archived_id}/transactions",
+        json={
+            "idempotency_key": f"aud-{uuid.uuid4().hex[:12]}",
+            "operation_type": "withdrawal",
+            "amount_cents": 5000,
+            "occurred_at": (datetime.now(UTC) + timedelta(days=10)).isoformat(),
+        },
+    )
+    assert scheduled.status_code == 201, scheduled.text
+    arch = await tx_client.patch(
+        f"/accounts/{archived_id}",
+        json={"archived": True},
+    )
+    assert arch.status_code == 200, arch.text
+
+    await _post(tx_client, active_id, "deposit", 25000, "2026-07-05T12:00:00Z")
+    await _post(tx_client, active_id, "withdrawal", 3000, "2026-07-06T12:00:00Z")
+    active_pending = await tx_client.post(
+        f"/accounts/{active_id}/transactions",
+        json={
+            "idempotency_key": f"aud-{uuid.uuid4().hex[:12]}",
+            "operation_type": "deposit",
+            "amount_cents": 15000,
+            "occurred_at": (datetime.now(UTC) + timedelta(days=5)).isoformat(),
+        },
+    )
+    assert active_pending.status_code == 201, active_pending.text
+
+    summary = await tx_client.get("/dashboard/summary?month=2026-07")
+    assert summary.status_code == 200, summary.text
+    body = summary.json()
+
+    balances = {item["account_id"]: item for item in body["accounts"]}
+    assert set(balances) == {active_id}, "archived account must not appear"
+    assert balances[active_id]["posted_balance_cents"] == 22000
+    assert balances[active_id]["projected_balance_cents"] == 37000
+
+    upcoming_ids = {item["id"] for item in body["upcoming"]}
+    assert upcoming_ids == {active_pending.json()["id"]}, (
+        "upcoming must show only active-account pendings"
+    )
+
+    recent = {item["id"]: item for item in body["recent"]}
+    assert all(item["account_id"] == active_id for item in body["recent"])
+    recent_accounts = {item["account_id"] for item in body["recent"]}
+    assert recent_accounts == {active_id}, "recent must show only active-account posts"
+    assert recent, "active account has posted transactions and must appear in recent"
