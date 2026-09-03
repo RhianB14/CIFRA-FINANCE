@@ -43,6 +43,17 @@ class RecurringPatch(BaseModel):
     ends_on: date | None = None
     is_active: bool | None = None
 
+    def updates(self) -> dict[str, object]:
+        fields_set = self.model_fields_set
+        updates: dict[str, object] = {}
+        if "template_description" in fields_set:
+            updates["template_description"] = self.template_description
+        if "ends_on" in fields_set:
+            updates["ends_on"] = self.ends_on
+        if "is_active" in fields_set:
+            updates["is_active"] = self.is_active
+        return updates
+
 
 class RecurringOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -155,13 +166,7 @@ async def patch_recurring_route(
     session: DbSession,
 ) -> RecurringOut:
     await bind_current_user(session, user.id)
-    updates: dict[str, object] = {}
-    if payload.template_description is not None:
-        updates["template_description"] = payload.template_description
-    if payload.ends_on is not None:
-        updates["ends_on"] = payload.ends_on
-    if payload.is_active is not None:
-        updates["is_active"] = payload.is_active
+    updates = payload.updates()
     try:
         row = await update_recurring(session, user.id, recurring_id, updates)
     except RecurringError as exc:
