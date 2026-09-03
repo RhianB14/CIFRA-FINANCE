@@ -1,6 +1,16 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("recharts", () => ({
+  ResponsiveContainer: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  LineChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  Line: () => null,
+  CartesianGrid: () => null,
+  XAxis: () => null,
+  YAxis: () => null,
+  Tooltip: () => null,
+}));
+
 class ResizeObserverStub {
   observe() {}
   unobserve() {}
