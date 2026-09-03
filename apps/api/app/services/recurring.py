@@ -1,6 +1,4 @@
 import calendar
-import hashlib
-import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
@@ -10,7 +8,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Account, RecurringTransaction, Transaction
-from app.services.ledger import IdempotencyConflictError
+from app.services.ledger import IdempotencyConflictError, payload_signature
 
 _CADENCES = ("daily", "weekly", "monthly", "yearly")
 _OPERATIONS = ("deposit", "withdrawal")
@@ -244,20 +242,15 @@ def _occurrence_datetime(occurrence: date) -> datetime:
 
 
 def _recurring_signature(row: RecurringTransaction, occurrence: date) -> str:
-    payload = json.dumps(
-        {
-            "operation_type": row.template_operation_type,
-            "amount_cents": row.template_amount_cents,
-            "occurred_at": _occurrence_datetime(occurrence).isoformat(),
-            "description": row.template_description,
-            "external_id": None,
-            "fingerprint": f"recurring:{row.id}",
-            "reverses_transaction_id": None,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
+    return payload_signature(
+        row.template_operation_type,
+        row.template_amount_cents,
+        _occurrence_datetime(occurrence),
+        row.template_description,
+        None,
+        f"recurring:{row.id}",
+        None,
     )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 async def _materialize_occurrence(

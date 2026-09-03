@@ -1,14 +1,13 @@
-import hashlib
-import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Account, Transaction
-from app.services.ledger import IdempotencyConflictError
+from app.services.ledger import IdempotencyConflictError, payload_signature
 
 _ALLOWED_SCHEDULED_OPERATIONS = ("deposit", "withdrawal")
 
@@ -48,47 +47,60 @@ async def create_scheduled(
     if account is None or account.user_id != user_id:
         raise ScheduledError("account not found for owner")
 
-    existing = await session.execute(
-        select(Transaction).where(
-            Transaction.account_id == account_id,
-            Transaction.idempotency_key == idempotency_key,
-        )
+    signature = payload_signature(
+        operation_type,
+        amount_cents,
+        occurred_at,
+        description,
+        external_id,
+        fingerprint,
+        None,
     )
-    replay = existing.scalar_one_or_none()
-    if replay is not None:
-        if replay.payload_signature != _payload_signature(
-            operation_type, amount_cents, occurred_at, description, external_id, fingerprint
-        ):
+
+    insert_stmt = (
+        pg_insert(Transaction)
+        .values(
+            user_id=user_id,
+            account_id=account_id,
+            idempotency_key=idempotency_key,
+            payload_signature=signature,
+            kind="credit" if operation_type == "deposit" else "debit",
+            operation_type=operation_type,
+            status="pending",
+            amount_cents=amount_cents,
+            occurred_at=occurred_at,
+            description=description,
+            external_id=external_id,
+            fingerprint=fingerprint,
+            result_balance_after_cents=0,
+            result_balance_version=0,
+        )
+        .on_conflict_do_nothing(
+            index_elements=[Transaction.account_id, Transaction.idempotency_key]
+        )
+        .returning(Transaction.id)
+    )
+    inserted = (await session.execute(insert_stmt)).first()
+
+    if inserted is None:
+        winner = await session.execute(
+            select(Transaction).where(
+                Transaction.account_id == account_id,
+                Transaction.idempotency_key == idempotency_key,
+            )
+        )
+        winner_row = winner.scalar_one_or_none()
+        if winner_row is None or winner_row.payload_signature != signature:
             raise IdempotencyConflictError("idempotency key reused with different payload")
         return ScheduledResult(
-            transaction_id=replay.id,
+            transaction_id=winner_row.id,
             account_id=account_id,
-            status=replay.status,
+            status=winner_row.status,
             created=False,
         )
 
-    pending = Transaction(
-        user_id=user_id,
-        account_id=account_id,
-        idempotency_key=idempotency_key,
-        payload_signature=_payload_signature(
-            operation_type, amount_cents, occurred_at, description, external_id, fingerprint
-        ),
-        kind="credit" if operation_type == "deposit" else "debit",
-        operation_type=operation_type,
-        status="pending",
-        amount_cents=amount_cents,
-        occurred_at=occurred_at,
-        description=description,
-        external_id=external_id,
-        fingerprint=fingerprint,
-        result_balance_after_cents=0,
-        result_balance_version=0,
-    )
-    session.add(pending)
-    await session.flush()
     return ScheduledResult(
-        transaction_id=pending.id,
+        transaction_id=inserted.id,
         account_id=account_id,
         status="pending",
         created=True,
@@ -156,26 +168,3 @@ async def promote_due(
         )
         promoted += 1
     return promoted
-
-
-def _payload_signature(
-    operation_type: str,
-    amount_cents: int,
-    occurred_at: datetime,
-    description: str | None,
-    external_id: str | None,
-    fingerprint: str | None,
-) -> str:
-    payload = json.dumps(
-        {
-            "operation_type": operation_type,
-            "amount_cents": amount_cents,
-            "occurred_at": occurred_at.isoformat(),
-            "description": description,
-            "external_id": external_id,
-            "fingerprint": fingerprint,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
