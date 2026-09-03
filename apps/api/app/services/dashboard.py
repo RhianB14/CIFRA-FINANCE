@@ -148,11 +148,16 @@ def _signed(kind: str, amount: int) -> int:
     return amount if kind == "credit" else -amount
 
 
-async def _user_accounts(session: AsyncSession, user_id: UUID) -> list[Account]:
+async def _user_accounts(
+    session: AsyncSession,
+    user_id: UUID,
+    include_archived: bool = False,
+) -> list[Account]:
+    conditions = [Account.user_id == user_id]
+    if not include_archived:
+        conditions.append(Account.archived_at.is_(None))
     rows = await session.execute(
-        select(Account)
-        .where(Account.user_id == user_id, Account.archived_at.is_(None))
-        .order_by(Account.created_at, Account.id)
+        select(Account).where(*conditions).order_by(Account.created_at, Account.id)
     )
     return list(rows.scalars().all())
 
@@ -162,19 +167,24 @@ async def _flows_per_account(
     user_id: UUID,
     start: datetime,
     end: datetime,
+    account_ids: set[UUID] | None = None,
 ) -> dict[UUID, tuple[int, int]]:
+    conditions = [
+        Transaction.user_id == user_id,
+        Transaction.status == "posted",
+        Transaction.occurred_at >= start,
+        Transaction.occurred_at < end,
+        Transaction.operation_type.notin_(("transfer_out", "transfer_in")),
+    ]
+    if account_ids is not None:
+        conditions.append(Transaction.account_id.in_(account_ids))
     rows = await session.execute(
         select(
             Transaction.account_id,
             Transaction.kind,
             func.sum(Transaction.amount_cents),
         )
-        .where(
-            Transaction.user_id == user_id,
-            Transaction.status == "posted",
-            Transaction.occurred_at >= start,
-            Transaction.occurred_at < end,
-        )
+        .where(*conditions)
         .group_by(Transaction.account_id, Transaction.kind)
     )
     buckets: dict[UUID, list[int]] = {}
@@ -192,7 +202,17 @@ async def _flows_per_currency(
     user_id: UUID,
     start: datetime,
     end: datetime,
+    account_ids: set[UUID] | None = None,
 ) -> dict[str, tuple[int, int]]:
+    conditions = [
+        Transaction.user_id == user_id,
+        Transaction.status == "posted",
+        Transaction.occurred_at >= start,
+        Transaction.occurred_at < end,
+        Transaction.operation_type.notin_(("transfer_out", "transfer_in")),
+    ]
+    if account_ids is not None:
+        conditions.append(Transaction.account_id.in_(account_ids))
     rows = await session.execute(
         select(
             Account.currency,
@@ -200,12 +220,7 @@ async def _flows_per_currency(
             func.sum(Transaction.amount_cents),
         )
         .join(Account, Account.id == Transaction.account_id)
-        .where(
-            Transaction.user_id == user_id,
-            Transaction.status == "posted",
-            Transaction.occurred_at >= start,
-            Transaction.occurred_at < end,
-        )
+        .where(*conditions)
         .group_by(Account.currency, Transaction.kind)
     )
     buckets: dict[str, list[int]] = {}
@@ -243,7 +258,10 @@ async def dashboard_summary(
 ) -> DashboardSummary:
     month_start, month_end = month_bounds(month)
     accounts = await _user_accounts(session, user_id)
-    flows = await _flows_per_account(session, user_id, month_start, month_end)
+    active_ids = {account.id for account in accounts}
+    flows = await _flows_per_account(
+        session, user_id, month_start, month_end, account_ids=active_ids
+    )
     pending = await _pending_per_account(session, user_id)
 
     currency_posted: dict[str, int] = {}
@@ -352,9 +370,10 @@ async def dashboard_evolution(
     window_start = month_bounds(series[0])[0]
 
     accounts = await _user_accounts(session, user_id)
+    active_ids = {account.id for account in accounts}
 
     pre_flows = await _flows_per_currency(
-        session, user_id, datetime(1970, 1, 1, tzinfo=UTC), window_start
+        session, user_id, datetime(1970, 1, 1, tzinfo=UTC), window_start, account_ids=active_ids
     )
 
     opening: dict[str, int] = {}
@@ -362,14 +381,48 @@ async def dashboard_evolution(
         opening[account.currency] = opening.get(account.currency, 0) + account.initial_balance_cents
 
     points: list[EvolutionPoint] = []
+
+    def _transfer_signed(kind: str, amount: int) -> int:
+        return amount if kind == "credit" else -amount
+
+    async def _transfer_net_per_currency(
+        start: datetime,
+        end: datetime,
+    ) -> dict[str, int]:
+        rows = await session.execute(
+            select(
+                Account.currency,
+                Transaction.kind,
+                func.sum(Transaction.amount_cents),
+            )
+            .join(Account, Account.id == Transaction.account_id)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.status == "posted",
+                Transaction.occurred_at >= start,
+                Transaction.occurred_at < end,
+                Transaction.operation_type.in_(("transfer_out", "transfer_in")),
+                Transaction.account_id.in_(active_ids),
+            )
+            .group_by(Account.currency, Transaction.kind)
+        )
+        nets: dict[str, int] = {}
+        for currency, kind, total in rows.all():
+            nets[currency] = nets.get(currency, 0) + _transfer_signed(kind, int(total))
+        return nets
+
     for currency in sorted(opening):
         pre_income, pre_expense = pre_flows.get(currency, (0, 0))
         running = opening[currency] + pre_income - pre_expense
         for month_label in series:
             month_start, month_end = month_bounds(month_label)
-            month_flow = await _flows_per_currency(session, user_id, month_start, month_end)
+            month_flow = await _flows_per_currency(
+                session, user_id, month_start, month_end, account_ids=active_ids
+            )
             income, expense = month_flow.get(currency, (0, 0))
+            transfer_month = await _transfer_net_per_currency(month_start, month_end)
             running += income - expense
+            running += transfer_month.get(currency, 0)
             points.append(
                 EvolutionPoint(
                     currency=currency,
@@ -391,8 +444,14 @@ async def dashboard_month_comparison(
     current_start, current_end = month_bounds(month)
     previous_start, previous_end = month_bounds(previous)
 
-    current_flows = await _flows_per_currency(session, user_id, current_start, current_end)
-    previous_flows = await _flows_per_currency(session, user_id, previous_start, previous_end)
+    accounts = await _user_accounts(session, user_id)
+    active_ids = {account.id for account in accounts}
+    current_flows = await _flows_per_currency(
+        session, user_id, current_start, current_end, account_ids=active_ids
+    )
+    previous_flows = await _flows_per_currency(
+        session, user_id, previous_start, previous_end, account_ids=active_ids
+    )
 
     rows: list[ComparisonRow] = []
     for currency in sorted(set(current_flows) | set(previous_flows)):
