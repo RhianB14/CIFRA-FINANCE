@@ -111,25 +111,12 @@ async def test_daily_job_processes_all_accounts_and_users(
     assert account_b.current_balance_cents == 90000
 
     materialized = (
-        (
-            await db_session.execute(
-                select(func.count())
-                .select_from(Transaction)
-                .where(
-                    Transaction.account_id == rec_account.id,
-                    Transaction.fingerprint == f"recurring:{recurring_user.id}",
-                )
-            )
-        )
-        if False
-        else (
-            await db_session.execute(
-                select(func.count())
-                .select_from(Transaction)
-                .where(
-                    Transaction.account_id == rec_account.id,
-                    Transaction.idempotency_key.like("recurring:%"),
-                )
+        await db_session.execute(
+            select(func.count())
+            .select_from(Transaction)
+            .where(
+                Transaction.account_id == rec_account.id,
+                Transaction.idempotency_key.like("recurring:%"),
             )
         )
     ).scalar_one()
