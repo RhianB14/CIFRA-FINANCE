@@ -13,7 +13,7 @@ def _parse_today(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value)
 
 
-def main() -> int:
+async def main() -> int:
     parser = argparse.ArgumentParser(description="Cifra daily job (promotion + recurring)")
     parser.add_argument(
         "--today",
@@ -23,17 +23,12 @@ def main() -> int:
     args = parser.parse_args()
 
     today = _parse_today(args.today)
-
-    async def _run() -> tuple[int, str]:
-        result = await run_daily_job(get_session_factory(), today=today)
-        return result.exit_code, result.to_json()
-
-    exit_code, payload = asyncio.run(_run())
-    print(payload)
+    result = await run_daily_job(get_session_factory(), today=today)
+    print(result.to_json())
     sys.stdout.flush()
-    asyncio.run(dispose_engine())
-    return exit_code
+    await dispose_engine()
+    return result.exit_code
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(asyncio.run(main()))
