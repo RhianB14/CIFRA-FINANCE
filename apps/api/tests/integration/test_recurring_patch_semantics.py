@@ -103,3 +103,24 @@ async def test_patch_null_then_inform_restores(
     )
     assert restored.status_code == 200, restored.text
     assert restored.json()["template_description"] == "novo valor"
+
+
+@pytest.mark.asyncio
+async def test_patch_is_active_null_rejected_without_persisting(
+    tx_client: httpx.AsyncClient,
+) -> None:
+    recurring = await _create_recurring(tx_client)
+    recurring_id = str(recurring["id"])
+
+    rejected = await tx_client.patch(
+        f"/recurring-transactions/{recurring_id}",
+        json={"is_active": None},
+    )
+    assert rejected.status_code == 422, "explicit null for is_active must be rejected"
+
+    reloaded = await tx_client.get(f"/recurring-transactions/{recurring_id}")
+    assert reloaded.status_code == 200, reloaded.text
+    body = reloaded.json()
+    assert body["is_active"] is True
+    assert body["template_description"] == "aluguel"
+    assert body["ends_on"] == "2026-12-05"

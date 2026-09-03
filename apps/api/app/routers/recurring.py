@@ -3,7 +3,7 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import bind_current_user, get_session
@@ -42,6 +42,12 @@ class RecurringPatch(BaseModel):
     template_description: str | None = Field(min_length=1, max_length=500, default=None)
     ends_on: date | None = None
     is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def _reject_null_is_active(self) -> "RecurringPatch":
+        if "is_active" in self.model_fields_set and self.is_active is None:
+            raise ValueError("is_active cannot be null: omit the field or send true/false")
+        return self
 
     def updates(self) -> dict[str, object]:
         fields_set = self.model_fields_set
