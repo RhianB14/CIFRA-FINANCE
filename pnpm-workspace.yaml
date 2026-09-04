@@ -22,3 +22,5 @@ packages:
   - apps/web
   - apps/mobile
   - packages/*
+
+minimumReleaseAge: 0
