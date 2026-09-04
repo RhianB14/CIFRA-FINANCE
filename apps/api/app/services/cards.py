@@ -7,6 +7,7 @@ import sqlalchemy as sa
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import attributes
 
 from app.models import Account, CardInvoice, Category, CreditCard, InvoicePayment, Transaction
 from app.services.ledger import (
@@ -21,6 +22,22 @@ MAX_INSTALLMENTS = 48
 
 class CardError(Exception):
     pass
+
+
+async def _refresh_locked(session: AsyncSession, obj: object) -> None:
+    attributes.instance_state(obj)
+    await session.refresh(obj, with_for_update=True)
+
+
+async def _lock_finite(session: AsyncSession, account_ids: set[UUID]) -> None:
+    ordered = sorted(account_ids)
+    rows = await session.execute(
+        select(Account.id).where(Account.id.in_(ordered)).order_by(Account.id).with_for_update()
+    )
+    locked = list(rows.scalars().all())
+    if len(locked) != len(ordered):
+        missing = set(ordered) - set(locked)
+        raise CardError(f"account not found: {sorted(missing)[0]}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +112,7 @@ async def _owned_card(session: AsyncSession, card_id: UUID, user_id: UUID) -> Cr
     card = await session.get(CreditCard, card_id)
     if card is None or card.user_id != user_id:
         raise CardError("card not found")
+    await _refresh_locked(session, card)
     return card
 
 
@@ -339,10 +357,12 @@ async def create_card_purchase(
             raise IdempotencyConflictError("idempotency key conflict")
         return group
 
-    plan = build_installment_plan(purchase_date, card.closing_day, amount_cents, installments)
-    group_id = _group_seed(f"inst:{user_id}:{card.id}:{idempotency_key}")
+    await _lock_finite(session, {card.account_id})
     account = await session.get(Account, card.account_id)
     assert account is not None
+    await _refresh_locked(session, account)
+    plan = build_installment_plan(purchase_date, card.closing_day, amount_cents, installments)
+    group_id = _group_seed(f"inst:{user_id}:{card.id}:{idempotency_key}")
     created: list[Transaction] = []
     for index, (year, month) in enumerate(plan.periods):
         invoice = await get_or_create_invoice(session, card, year, month)
@@ -404,6 +424,7 @@ async def apply_invoice_payment(
 ) -> InvoicePayment:
     if amount_cents <= 0:
         raise CardError("payment amount must be positive")
+
     invoice = await session.get(CardInvoice, invoice_id)
     if invoice is None or invoice.user_id != user_id:
         raise CardError("invoice not found")
@@ -416,6 +437,23 @@ async def apply_invoice_payment(
         raise CardError("payer must differ from the card companion account")
     if payer.currency != card.currency:
         raise CardError("payer account currency must match card currency")
+
+    card = await session.get(CreditCard, invoice.card_id)
+    assert card is not None
+    await _refresh_locked(session, card)
+    await _lock_finite(session, {payer.id, card.account_id})
+    payer = await session.get(Account, payer_account_id)
+    assert payer is not None
+    await _refresh_locked(session, payer)
+    card_acct = await session.get(Account, card.account_id)
+    assert card_acct is not None
+    await _refresh_locked(session, card_acct)
+    locked_invoice = await session.execute(
+        select(CardInvoice).where(CardInvoice.id == invoice.id).with_for_update()
+    )
+    if locked_invoice.scalar_one() is None:
+        raise CardError("invoice not found")
+    await session.refresh(invoice)
 
     signature = payload_signature(
         "card_payment",
@@ -438,13 +476,6 @@ async def apply_invoice_payment(
             raise IdempotencyConflictError("idempotency key conflict")
         return previous
 
-    total = 0
-    paid = 0
-    locked_invoice = await session.execute(
-        select(CardInvoice).where(CardInvoice.id == invoice.id).with_for_update()
-    )
-    if locked_invoice.scalar_one() is None:
-        raise CardError("invoice not found")
     total = await _invoice_charges_total(session, invoice.id)
     paid = await _invoice_paid_total(session, invoice.id)
     if amount_cents > total - paid:
@@ -607,6 +638,12 @@ async def reverse_card_purchase(
     else:
         targets = [anchor]
 
+    if anchor.card_id is not None:
+        card_row = await session.get(CreditCard, anchor.card_id)
+        assert card_row is not None
+        await _refresh_locked(session, card_row)
+    await _lock_finite(session, {target.account_id for target in targets})
+
     reversal_keys = [
         idempotency_key if len(targets) == 1 else f"{idempotency_key}#{target.installment_number}"
         for target in targets
@@ -637,6 +674,7 @@ async def reverse_card_purchase(
             continue
         account = await session.get(Account, target.account_id)
         assert account is not None
+        await _refresh_locked(session, account)
         account.current_balance_cents += target.amount_cents
         account.current_balance_version += 1
         reversal_key = (
@@ -704,26 +742,40 @@ async def reverse_invoice_payment(
     payment = rows.scalar_one_or_none()
     if payment is None or payment.kind != "payment":
         raise CardError("payment not found")
+
+    await _refresh_locked(session, payment)
     existing = await session.execute(
+        select(InvoicePayment).where(InvoicePayment.reversed_by_id == payment_id)
+    )
+    claimed = existing.scalar_one_or_none()
+    if claimed is not None:
+        if claimed.idempotency_key == idempotency_key:
+            return claimed
+        raise CardError("payment already reversed")
+    prior_key = await session.execute(
         select(InvoicePayment).where(
             InvoicePayment.account_id == payment.account_id,
             InvoicePayment.idempotency_key == idempotency_key,
         )
     )
-    prior = existing.scalar_one_or_none()
-    if prior is not None:
-        if prior.kind == "reversal" and prior.reversed_by_id == payment.id:
-            return prior
+    if prior_key.scalar_one_or_none() is not None:
         raise IdempotencyConflictError("idempotency key conflict")
-    if payment.reversed_by_id is not None:
-        raise CardError("payment already reversed")
 
     invoice = await session.get(CardInvoice, payment.invoice_id)
     assert invoice is not None
     card = await session.get(CreditCard, invoice.card_id)
     assert card is not None
+    await _refresh_locked(session, card)
+    await _lock_finite(session, {payment.account_id, card.account_id})
     payer = await session.get(Account, payment.account_id)
     assert payer is not None
+    await _refresh_locked(session, payer)
+    locked_invoice = await session.execute(
+        select(CardInvoice).where(CardInvoice.id == invoice.id).with_for_update()
+    )
+    if locked_invoice.scalar_one() is None:
+        raise CardError("invoice not found")
+    await session.refresh(invoice)
     occurred_at = datetime.now(UTC).replace(microsecond=0)
     signature = payload_signature(
         "card_payment_reversal",

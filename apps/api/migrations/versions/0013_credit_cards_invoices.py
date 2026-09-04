@@ -167,6 +167,13 @@ def upgrade() -> None:
         ["account_id", "idempotency_key"],
         unique=True,
     )
+    op.create_index(
+        "uq_invoice_payments_reversed_payment",
+        "invoice_payments",
+        ["reversed_by_id"],
+        unique=True,
+        postgresql_where=sa.text("reversed_by_id IS NOT NULL"),
+    )
     op.add_column("transactions", sa.Column("card_id", sa.UUID(), nullable=True))
     op.add_column("transactions", sa.Column("invoice_id", sa.UUID(), nullable=True))
     op.add_column("transactions", sa.Column("charge_kind", sa.String(length=20), nullable=True))
@@ -289,6 +296,7 @@ def downgrade() -> None:
     op.drop_column("transactions", "invoice_id")
     op.drop_column("transactions", "card_id")
     op.drop_index("uq_invoice_payments_account_idempotency", table_name="invoice_payments")
+    op.drop_index("uq_invoice_payments_reversed_payment", table_name="invoice_payments")
     op.drop_index("ix_invoice_payments_invoice_id", table_name="invoice_payments")
     op.drop_table("invoice_payments")
     op.drop_index("uq_card_invoices_card_period", table_name="card_invoices")

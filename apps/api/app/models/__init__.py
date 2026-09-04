@@ -534,5 +534,11 @@ class InvoicePayment(Base):
         Index(
             "uq_invoice_payments_account_idempotency", "account_id", "idempotency_key", unique=True
         ),
+        Index(
+            "uq_invoice_payments_reversed_payment",
+            "reversed_by_id",
+            unique=True,
+            postgresql_where=text("reversed_by_id IS NOT NULL"),
+        ),
         Index("ix_invoice_payments_invoice_id", "invoice_id"),
     )
