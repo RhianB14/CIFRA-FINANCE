@@ -85,16 +85,16 @@ Durante a validação houve falhas reproduzíveis do proxy Docker Desktop (`WinE
 | banco dev intacto | PROVEN | HIGH |
 | revisão independente | PROVEN | HIGH |
 | API integral, verify e Compose/smokes | PROVEN | HIGH |
-| CI remoto no novo HEAD | PENDING | LOW |
+| CI remoto no novo HEAD | BLOCKED | HIGH |
 
 ## Known unknowns
 
 - O proxy Docker Desktop host→container apresentou `WinError 64` sob rajadas de conexões; relay socat foi recriado com portas internas/externas coerentes e `PGSSLMODE=disable` durante a validação local.
-- O resultado final do CI depende do push dos commits deste Run.
+- O CI remoto permaneceu 11/13 mesmo após rerun autorizado: `Build and Expo` falha no gate existente `expo install --check` por drift externo (`expo 57.0.19` esperado `~57.0.20`; `expo-router 57.0.18` esperado `~57.0.19`) e `MinIO Image Scan` falha no Trivy da imagem externa. Os arquivos necessários para corrigir versões móveis e workflows estão explicitamente fora do whitelist deste Run.
 
 ## Non-verifiable claims
 
-- Checks remotos do novo HEAD somente serão marcados após push e polling da API REST.
+- Nenhuma. Estado remoto e bloqueios foram consultados pela API REST.
 
 ## Confirmações
 
@@ -103,5 +103,5 @@ Durante a validação houve falhas reproduzíveis do proxy Docker Desktop (`WinE
 - Nenhum force push, tag, release ou deploy.
 - Banco dev `cifra` não foi alterado neste Run.
 
-VEREDITO: PARCIAL — validações finais e CI remoto ainda pendentes.
+VEREDITO: PARCIAL — implementação e validações locais aprovadas; CI remoto bloqueado em 11/13 por dois gates externos fora do whitelist após rerun.
 MERGE: não (não autorizado neste prompt)
