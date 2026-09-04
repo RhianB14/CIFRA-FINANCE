@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from uuid import UUID
@@ -7,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Account, CardInvoice, CreditCard, InvoicePayment, Transaction
+from app.models import Account, CardInvoice, Category, CreditCard, InvoicePayment, Transaction
 from app.services.ledger import (
     IdempotencyConflictError,
     StaleVersionError,
@@ -81,15 +82,12 @@ def derive_invoice_status(
     paid_cents: int,
     today: date,
 ) -> str:
-    partial = total_cents > 0 and 0 < paid_cents < total_cents
-    if invoice.status == "open":
-        return "open"
     if total_cents > 0 and paid_cents >= total_cents:
         return "paid"
-    if invoice.due_date is not None and today > invoice.due_date:
-        return "overdue"
-    if partial:
+    if total_cents > 0 and 0 < paid_cents < total_cents:
         return "partially_paid"
+    if invoice.status == "open":
+        return "open"
     return "closed"
 
 
@@ -108,7 +106,14 @@ async def get_or_create_invoice(
 ) -> CardInvoice:
     stmt = (
         pg_insert(CardInvoice)
-        .values(user_id=card.user_id, card_id=card.id, year=year, month=month, status="open")
+        .values(
+            user_id=card.user_id,
+            card_id=card.id,
+            year=year,
+            month=month,
+            status="open",
+            due_date=invoice_due_date(year, month, card.due_day),
+        )
         .on_conflict_do_nothing(index_elements=["card_id", "year", "month"])
         .returning(CardInvoice.id)
     )
@@ -278,10 +283,7 @@ def _installment_keys(base: str, installments: int) -> list[str]:
 
 
 def _group_seed(secret_seed: str) -> UUID:
-    digest = 0
-    for char in secret_seed:
-        digest = (digest * 31 + ord(char)) % (2**62)
-    return UUID(int=digest)
+    return uuid.uuid5(NAMESPACE_GROUP, secret_seed)
 
 
 async def create_card_purchase(
@@ -300,6 +302,10 @@ async def create_card_purchase(
         raise CardError("unsupported charge kind")
     if amount_cents <= 0:
         raise CardError("amount must be positive")
+    if category_id is not None:
+        category = await session.get(Category, category_id)
+        if category is None or category.user_id != user_id:
+            raise CardError("category not found")
     if not 1 <= installments <= MAX_INSTALLMENTS:
         raise CardError(f"installments must be between 1 and {MAX_INSTALLMENTS}")
     if charge_kind != "purchase" and installments > 1:
@@ -334,12 +340,14 @@ async def create_card_purchase(
         return group
 
     plan = build_installment_plan(purchase_date, card.closing_day, amount_cents, installments)
-    group_id = _group_seed(f"inst:{idempotency_key}")
+    group_id = _group_seed(f"inst:{user_id}:{card.id}:{idempotency_key}")
     account = await session.get(Account, card.account_id)
     assert account is not None
     created: list[Transaction] = []
     for index, (year, month) in enumerate(plan.periods):
         invoice = await get_or_create_invoice(session, card, year, month)
+        if invoice.status != "open":
+            raise CardError("invoice period is already closed")
         installment_amount = plan.amounts[index]
         occurred_at = occurred_at_for_period(year, month, purchase_date)
         signature = payload_signature(
@@ -381,6 +389,10 @@ async def create_card_purchase(
     return created
 
 
+T0_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+NAMESPACE_GROUP = uuid.UUID("6f1c42f6-0f3e-5a44-9a17-2c6b8d3e5a10")
+
+
 async def apply_invoice_payment(
     session: AsyncSession,
     invoice_id: UUID,
@@ -400,13 +412,15 @@ async def apply_invoice_payment(
     payer = await session.get(Account, payer_account_id)
     if payer is None or payer.user_id != user_id:
         raise CardError("payer account not found")
+    if payer.id == card.account_id:
+        raise CardError("payer must differ from the card companion account")
     if payer.currency != card.currency:
         raise CardError("payer account currency must match card currency")
 
     signature = payload_signature(
         "card_payment",
         amount_cents,
-        occurred_at,
+        T0_EPOCH,
         str(invoice_id),
         None,
         None,
@@ -424,12 +438,19 @@ async def apply_invoice_payment(
             raise IdempotencyConflictError("idempotency key conflict")
         return previous
 
+    total = 0
+    paid = 0
+    locked_invoice = await session.execute(
+        select(CardInvoice).where(CardInvoice.id == invoice.id).with_for_update()
+    )
+    if locked_invoice.scalar_one() is None:
+        raise CardError("invoice not found")
     total = await _invoice_charges_total(session, invoice.id)
     paid = await _invoice_paid_total(session, invoice.id)
     if amount_cents > total - paid:
         raise CardError("payment exceeds remaining invoice balance")
 
-    group_id = _group_seed(f"pay:{idempotency_key}")
+    group_id = _group_seed(f"pay:{user_id}:{invoice_id}:{idempotency_key}")
     payer.current_balance_cents -= amount_cents
     payer.current_balance_version += 1
     out_txn = Transaction(
@@ -489,6 +510,13 @@ async def apply_invoice_payment(
     )
     session.add(payment)
     await session.flush()
+    totals = await invoice_totals(session, invoice, occurred_at.date())
+    await session.execute(
+        sa.update(CardInvoice)
+        .where(CardInvoice.id == invoice.id, CardInvoice.version == invoice.version)
+        .values(status=str(totals["status"]), version=invoice.version + 1)
+    )
+    await session.refresh(invoice)
     return payment
 
 
@@ -513,14 +541,24 @@ async def _invoice_charges_total(session: AsyncSession, invoice_id: UUID) -> int
 
 async def _invoice_paid_total(session: AsyncSession, invoice_id: UUID) -> int:
     rows = await session.execute(
-        select(sa.func.sum(InvoicePayment.amount_cents)).where(
-            InvoicePayment.invoice_id == invoice_id,
-            InvoicePayment.kind == "payment",
-            InvoicePayment.reversed_by_id.is_(None),
-        )
+        select(InvoicePayment.kind, sa.func.sum(InvoicePayment.amount_cents))
+        .where(InvoicePayment.invoice_id == invoice_id)
+        .group_by(InvoicePayment.kind)
     )
-    total = rows.scalar_one()
-    return int(total) if total is not None else 0
+    paid = 0
+    for kind, amount in rows.all():
+        paid += -int(amount) if str(kind).strip() == "reversal" else int(amount)
+    return paid
+
+
+def apply_overdue_rule(status: str, invoice: CardInvoice, today: date) -> str:
+    if (
+        status in ("closed", "partially_paid")
+        and invoice.due_date is not None
+        and today > invoice.due_date
+    ):
+        return "overdue"
+    return status
 
 
 async def invoice_totals(
@@ -531,6 +569,7 @@ async def invoice_totals(
     total = await _invoice_charges_total(session, invoice.id)
     paid = await _invoice_paid_total(session, invoice.id)
     status = derive_invoice_status(invoice, total, paid, today)
+    status = apply_overdue_rule(status, invoice, today)
     return {
         "total_cents": total,
         "paid_cents": paid,
@@ -638,6 +677,15 @@ async def reverse_card_purchase(
         session.add(reversal)
         reversals.append(reversal)
     await session.flush()
+    if anchor.invoice_id is not None:
+        invoice = await session.get(CardInvoice, anchor.invoice_id)
+        if invoice is not None:
+            totals = await invoice_totals(session, invoice, occurred_at.date())
+            await session.execute(
+                sa.update(CardInvoice)
+                .where(CardInvoice.id == invoice.id)
+                .values(status=str(totals["status"]))
+            )
     return reversals
 
 
@@ -656,8 +704,6 @@ async def reverse_invoice_payment(
     payment = rows.scalar_one_or_none()
     if payment is None or payment.kind != "payment":
         raise CardError("payment not found")
-    if payment.reversed_by_id is not None:
-        raise CardError("payment already reversed")
     existing = await session.execute(
         select(InvoicePayment).where(
             InvoicePayment.account_id == payment.account_id,
@@ -669,6 +715,8 @@ async def reverse_invoice_payment(
         if prior.kind == "reversal" and prior.reversed_by_id == payment.id:
             return prior
         raise IdempotencyConflictError("idempotency key conflict")
+    if payment.reversed_by_id is not None:
+        raise CardError("payment already reversed")
 
     invoice = await session.get(CardInvoice, payment.invoice_id)
     assert invoice is not None
@@ -747,8 +795,13 @@ async def reverse_invoice_payment(
     )
     session.add(reversal)
     await session.flush()
-    payment.reversed_by_id = reversal.id
-    await session.flush()
+    totals = await invoice_totals(session, invoice, occurred_at.date())
+    await session.execute(
+        sa.update(CardInvoice)
+        .where(CardInvoice.id == invoice.id, CardInvoice.version == invoice.version)
+        .values(status=str(totals["status"]), version=invoice.version + 1)
+    )
+    await session.refresh(invoice)
     return reversal
 
 

@@ -203,6 +203,27 @@ def upgrade() -> None:
         "charge_kind IS NULL OR charge_kind IN ('purchase', 'interest', 'late_fee', "
         "'iof', 'withdrawal_fee', 'other', 'payment', 'payment_reversal')",
     )
+    op.create_check_constraint(
+        op.f("transactions_card_linkage"),
+        "transactions",
+        "card_id IS NULL OR (invoice_id IS NOT NULL AND charge_kind IS NOT NULL)",
+    )
+    op.create_check_constraint(
+        op.f("transactions_card_operation"),
+        "transactions",
+        "operation_type NOT IN ('card_purchase', 'card_payment') OR card_id IS NOT NULL",
+    )
+    op.create_check_constraint(
+        op.f("transactions_installment_pair"),
+        "transactions",
+        "(installment_number IS NULL) = (installment_total IS NULL)",
+    )
+    op.create_check_constraint(
+        op.f("transactions_installment_range"),
+        "transactions",
+        "installment_number IS NULL OR "
+        "(installment_number BETWEEN 1 AND installment_total AND installment_total <= 48)",
+    )
     op.drop_constraint("transactions_operation_allowed", "transactions", type_="check")
     op.create_check_constraint(
         "transactions_operation_allowed",
@@ -248,6 +269,10 @@ def downgrade() -> None:
         "operation_type IN ('deposit', 'withdrawal', 'reversal', 'transfer_in', 'transfer_out')",
     )
     op.drop_constraint(op.f("transactions_charge_kind_allowed"), "transactions", type_="check")
+    op.drop_constraint(op.f("transactions_card_linkage"), "transactions", type_="check")
+    op.drop_constraint(op.f("transactions_card_operation"), "transactions", type_="check")
+    op.drop_constraint(op.f("transactions_installment_pair"), "transactions", type_="check")
+    op.drop_constraint(op.f("transactions_installment_range"), "transactions", type_="check")
     op.drop_constraint(
         op.f("fk_transactions_invoice_id_card_invoices"), "transactions", type_="foreignkey"
     )

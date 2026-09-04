@@ -244,6 +244,23 @@ class Transaction(Base):
             "'iof', 'withdrawal_fee', 'other', 'payment', 'payment_reversal')",
             name="transactions_charge_kind_allowed",
         ),
+        CheckConstraint(
+            "card_id IS NULL OR (invoice_id IS NOT NULL AND charge_kind IS NOT NULL)",
+            name="transactions_card_linkage",
+        ),
+        CheckConstraint(
+            "operation_type NOT IN ('card_purchase', 'card_payment') OR card_id IS NOT NULL",
+            name="transactions_card_operation",
+        ),
+        CheckConstraint(
+            "(installment_number IS NULL) = (installment_total IS NULL)",
+            name="transactions_installment_pair",
+        ),
+        CheckConstraint(
+            "installment_number IS NULL OR "
+            "(installment_number BETWEEN 1 AND installment_total AND installment_total <= 48)",
+            name="transactions_installment_range",
+        ),
         Index(
             "uq_transactions_account_idempotency",
             "account_id",
