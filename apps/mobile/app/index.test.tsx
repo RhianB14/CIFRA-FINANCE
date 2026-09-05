@@ -4,7 +4,7 @@ import { render } from "@testing-library/react-native";
 import HomeScreen from "./index";
 
 jest.mock("@cifra/api-client", () => ({
-  createApiClient: jest.fn(() => ({ live: jest.fn(), ready: jest.fn() })),
+  createApiClient: jest.fn(() => ({ listCards: jest.fn() })),
 }));
 
 const mockCreateApiClient = jest.mocked(createApiClient);
@@ -14,17 +14,17 @@ describe("HomeScreen", () => {
     mockCreateApiClient.mockClear();
   });
 
-  it("renders Cifra", async () => {
+  it("renders the online cards screen", async () => {
     const view = await render(<HomeScreen />);
 
-    expect(view.getByText("Cifra")).toBeTruthy();
+    expect(view.getByText("Cartões")).toBeTruthy();
+    expect(view.getByText("Entre na sua conta para visualizar os cartões.")).toBeTruthy();
   });
 
-  it("configures the API client without a network request", async () => {
-    const view = await render(<HomeScreen />);
+  it("configures the API client without a token request", async () => {
+    await render(<HomeScreen />);
 
     expect(mockCreateApiClient).toHaveBeenCalledTimes(1);
-    expect(mockCreateApiClient).toHaveBeenCalledWith({ baseUrl: "http://10.0.2.2:8000" });
-    expect(view.getByText("Cliente da API configurado")).toBeTruthy();
+    expect(mockCreateApiClient).toHaveBeenCalledWith({ baseUrl: "http://localhost:18000" });
   });
 });

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "currency": "BRL",
+  "card": {
+    "limit_cents": 100000,
+    "closing_day": 25,
+    "due_day": 10
+  },
+  "purchases": [
+    {"key": "f4-oracle-before-close", "date": "2024-02-24", "amount_cents": 12001, "installments": 1, "invoice_periods": ["2024-02"]},
+    {"key": "f4-oracle-after-close", "date": "2024-02-29", "amount_cents": 9000, "installments": 1, "invoice_periods": ["2024-03"]},
+    {"key": "f4-oracle-installment", "date": "2024-02-29", "amount_cents": 10001, "installments": 3, "installment_amounts_cents": [3334, 3334, 3333], "invoice_periods": ["2024-03", "2024-04", "2024-05"]}
+  ],
+  "before_payment": {
+    "payer_balance_cents": 200000,
+    "card_exposure_cents": 31002,
+    "available_cents": 68998,
+    "invoices": {
+      "2024-02": {"total_cents": 12001},
+      "2024-03": {"total_cents": 12334},
+      "2024-04": {"total_cents": 3334},
+      "2024-05": {"total_cents": 3333}
+    }
+  },
+  "partial_payment": {
+    "invoice_period": "2024-02",
+    "amount_cents": 4000,
+    "payer_balance_cents": 196000,
+    "paid_cents": 4000,
+    "remaining_cents": 8001,
+    "status": "partially_paid",
+    "card_exposure_cents": 27002,
+    "available_cents": 72998
+  },
+  "after_installment_reversal": {
+    "card_exposure_cents": 21001,
+    "available_cents": 78999,
+    "installment_reversal_rows": 3
+  }
+}

@@ -143,6 +143,10 @@ Recorrências (`recurring_transactions`, migração 0012) têm CRUD completo em 
 
 O dashboard web (`/dashboard`) renderiza saldos por moeda (nunca somados), fluxo do mês, contas, próximos agendados, últimos lançamentos, gráfico de evolução e comparativo (Recharts), com estados de loading, vazio e erro, acessibilidade e formatação `pt-BR`. Smoke E2E da fase: `scripts/f3_smoke.py` (agendado pendente, promoção, recorrência dia 5, dashboard por moeda).
 
+## Cartões, faturas e parcelamento (F4)
+
+Cartões em `/cards` possuem faturas materializadas, exposição separada do saldo bancário, compras à vista ou parceladas, encargos tipados, pagamentos parciais e estornos append-only. As regras contábeis, calendário e comando do job estão em `docs/f4-credit-cards.md`; o oráculo canônico está em `docs/f4-accounting-oracle.json`. A web oferece `/cards` e o mobile exibe a visão online. Smoke E2E: `scripts/f4_smoke.py`.
+
 ## Docker Compose
 
 No PowerShell:

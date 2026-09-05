@@ -212,6 +212,18 @@ class Transaction(Base):
         UUID(as_uuid=True), ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
     )
     transfer_group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    card_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("credit_cards.id", ondelete="RESTRICT"), nullable=True
+    )
+    invoice_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("card_invoices.id", ondelete="RESTRICT"), nullable=True
+    )
+    charge_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    installment_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    installment_number: Mapped[int | None] = mapped_column(nullable=True)
+    installment_total: Mapped[int | None] = mapped_column(nullable=True)
     result_balance_after_cents: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     result_balance_version: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
@@ -223,10 +235,32 @@ class Transaction(Base):
         CheckConstraint("kind IN ('credit', 'debit')", name="transactions_kind_allowed"),
         CheckConstraint(
             "operation_type IN ('deposit', 'withdrawal', 'reversal',"
-            " 'transfer_in', 'transfer_out')",
+            " 'transfer_in', 'transfer_out', 'card_purchase', 'card_payment')",
             name="transactions_operation_allowed",
         ),
         CheckConstraint("status IN ('pending', 'posted')", name="transactions_status_allowed"),
+        CheckConstraint(
+            "charge_kind IS NULL OR charge_kind IN ('purchase', 'interest', 'late_fee', "
+            "'iof', 'withdrawal_fee', 'other', 'payment', 'payment_reversal')",
+            name="transactions_charge_kind_allowed",
+        ),
+        CheckConstraint(
+            "card_id IS NULL OR (invoice_id IS NOT NULL AND charge_kind IS NOT NULL)",
+            name="transactions_card_linkage",
+        ),
+        CheckConstraint(
+            "operation_type NOT IN ('card_purchase', 'card_payment') OR card_id IS NOT NULL",
+            name="transactions_card_operation",
+        ),
+        CheckConstraint(
+            "(installment_number IS NULL) = (installment_total IS NULL)",
+            name="transactions_installment_pair",
+        ),
+        CheckConstraint(
+            "installment_number IS NULL OR "
+            "(installment_number BETWEEN 1 AND installment_total AND installment_total <= 48)",
+            name="transactions_installment_range",
+        ),
         Index(
             "uq_transactions_account_idempotency",
             "account_id",
@@ -241,6 +275,9 @@ class Transaction(Base):
             unique=True,
             postgresql_where=text("reversal_of_id IS NOT NULL"),
         ),
+        Index("ix_transactions_card_id", "card_id"),
+        Index("ix_transactions_invoice_id", "invoice_id"),
+        Index("ix_transactions_installment_group_id", "installment_group_id"),
     )
 
 
@@ -392,4 +429,116 @@ class RecurringTransaction(Base):
         ),
         Index("ix_recurring_user_next_run", "user_id", "next_run_on"),
         Index("ix_recurring_account_id", "account_id"),
+    )
+
+
+class CreditCard(Base):
+    __tablename__ = "credit_cards"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    account_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    currency: Mapped[str] = mapped_column(CHAR(3), nullable=False)
+    limit_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    closing_day: Mapped[int] = mapped_column(nullable=False)
+    due_day: Mapped[int] = mapped_column(nullable=False)
+    last_four: Mapped[str | None] = mapped_column(CHAR(4), nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    version: Mapped[int] = mapped_column(nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("limit_cents >= 0", name="ck_credit_cards_limit_non_negative"),
+        CheckConstraint(
+            "closing_day BETWEEN 1 AND 28 AND due_day BETWEEN 1 AND 28",
+            name="ck_credit_cards_days_valid",
+        ),
+        Index("uq_credit_cards_user_id_name", "user_id", "name", unique=True),
+    )
+
+
+class CardInvoice(Base):
+    __tablename__ = "card_invoices"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    card_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("credit_cards.id", ondelete="CASCADE"), nullable=False
+    )
+    year: Mapped[int] = mapped_column(nullable=False)
+    month: Mapped[int] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    closed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    version: Mapped[int] = mapped_column(nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("month BETWEEN 1 AND 12", name="ck_card_invoices_month_valid"),
+        CheckConstraint(
+            "status IN ('open', 'closed', 'partially_paid', 'paid', 'overdue')",
+            name="ck_card_invoices_status_allowed",
+        ),
+        Index("uq_card_invoices_card_period", "card_id", "year", "month", unique=True),
+        Index("ix_card_invoices_user_id", "user_id"),
+    )
+
+
+class InvoicePayment(Base):
+    __tablename__ = "invoice_payments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    invoice_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("card_invoices.id", ondelete="RESTRICT"), nullable=False
+    )
+    account_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False
+    )
+    transaction_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("transactions.id", ondelete="RESTRICT"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_signature: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    kind: Mapped[str] = mapped_column(String(10), nullable=False, default="payment")
+    reversed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("invoice_payments.id", ondelete="RESTRICT"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("amount_cents > 0", name="ck_invoice_payments_amount_positive"),
+        CheckConstraint("kind IN ('payment', 'reversal')", name="ck_invoice_payments_kind_allowed"),
+        Index(
+            "uq_invoice_payments_account_idempotency", "account_id", "idempotency_key", unique=True
+        ),
+        Index(
+            "uq_invoice_payments_reversed_payment",
+            "reversed_by_id",
+            unique=True,
+            postgresql_where=text("reversed_by_id IS NOT NULL"),
+        ),
+        Index("ix_invoice_payments_invoice_id", "invoice_id"),
     )

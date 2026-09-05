@@ -192,6 +192,144 @@ components:
       - file
       title: Body_upload_attachment_accounts__account_id__attachments_post
       type: object
+    CardArchive:
+      properties:
+        expected_version:
+          title: Expected Version
+          type: integer
+      required:
+      - expected_version
+      title: CardArchive
+      type: object
+    CardCreate:
+      additionalProperties: false
+      properties:
+        closing_day:
+          maximum: 28.0
+          minimum: 1.0
+          title: Closing Day
+          type: integer
+        currency:
+          pattern: ^[A-Z]{3}$
+          title: Currency
+          type: string
+        due_day:
+          maximum: 28.0
+          minimum: 1.0
+          title: Due Day
+          type: integer
+        last_four:
+          anyOf:
+          - pattern: ^[0-9]{4}$
+            type: string
+          - type: 'null'
+          title: Last Four
+        limit_cents:
+          minimum: 0.0
+          title: Limit Cents
+          type: integer
+        name:
+          maxLength: 255
+          minLength: 1
+          title: Name
+          type: string
+      required:
+      - name
+      - currency
+      - limit_cents
+      - closing_day
+      - due_day
+      title: CardCreate
+      type: object
+    CardOut:
+      properties:
+        account_id:
+          format: uuid
+          title: Account Id
+          type: string
+        archived_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Archived At
+        closing_day:
+          title: Closing Day
+          type: integer
+        currency:
+          title: Currency
+          type: string
+        due_day:
+          title: Due Day
+          type: integer
+        id:
+          format: uuid
+          title: Id
+          type: string
+        last_four:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Four
+        limit_cents:
+          title: Limit Cents
+          type: integer
+        name:
+          title: Name
+          type: string
+        version:
+          title: Version
+          type: integer
+      required:
+      - id
+      - account_id
+      - name
+      - currency
+      - limit_cents
+      - closing_day
+      - due_day
+      - last_four
+      - version
+      - archived_at
+      title: CardOut
+      type: object
+    CardPatch:
+      additionalProperties: false
+      properties:
+        closing_day:
+          anyOf:
+          - maximum: 28.0
+            minimum: 1.0
+            type: integer
+          - type: 'null'
+          title: Closing Day
+        due_day:
+          anyOf:
+          - maximum: 28.0
+            minimum: 1.0
+            type: integer
+          - type: 'null'
+          title: Due Day
+        expected_version:
+          title: Expected Version
+          type: integer
+        limit_cents:
+          anyOf:
+          - minimum: 0.0
+            type: integer
+          - type: 'null'
+          title: Limit Cents
+        name:
+          anyOf:
+          - maxLength: 255
+            minLength: 1
+            type: string
+          - type: 'null'
+          title: Name
+      required:
+      - expected_version
+      title: CardPatch
+      type: object
     CategoryCreate:
       additionalProperties: false
       properties:
@@ -430,6 +568,23 @@ components:
       - end_balance_cents
       title: EvolutionOut
       type: object
+    ExposureOut:
+      properties:
+        available_cents:
+          title: Available Cents
+          type: integer
+        exposure_cents:
+          title: Exposure Cents
+          type: integer
+        limit_cents:
+          title: Limit Cents
+          type: integer
+      required:
+      - exposure_cents
+      - limit_cents
+      - available_cents
+      title: ExposureOut
+      type: object
     HTTPValidationError:
       properties:
         detail:
@@ -482,6 +637,59 @@ components:
       - skipped_count
       - created_at
       title: ImportBatchOut
+      type: object
+    InvoiceOut:
+      properties:
+        card_id:
+          format: uuid
+          title: Card Id
+          type: string
+        closed_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Closed At
+        due_date:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          title: Due Date
+        id:
+          format: uuid
+          title: Id
+          type: string
+        month:
+          title: Month
+          type: integer
+        paid_cents:
+          title: Paid Cents
+          type: integer
+        remaining_cents:
+          title: Remaining Cents
+          type: integer
+        status:
+          title: Status
+          type: string
+        total_cents:
+          title: Total Cents
+          type: integer
+        year:
+          title: Year
+          type: integer
+      required:
+      - id
+      - card_id
+      - year
+      - month
+      - status
+      - due_date
+      - closed_at
+      - total_cents
+      - paid_cents
+      - remaining_cents
+      title: InvoiceOut
       type: object
     MeResponse:
       additionalProperties: false
@@ -560,6 +768,125 @@ components:
       - token
       - new_password
       title: PasswordResetRequest
+      type: object
+    PaymentCreate:
+      additionalProperties: false
+      properties:
+        amount_cents:
+          exclusiveMinimum: 0.0
+          title: Amount Cents
+          type: integer
+        idempotency_key:
+          maxLength: 100
+          minLength: 1
+          title: Idempotency Key
+          type: string
+        occurred_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Occurred At
+        payer_account_id:
+          format: uuid
+          title: Payer Account Id
+          type: string
+      required:
+      - payer_account_id
+      - idempotency_key
+      - amount_cents
+      title: PaymentCreate
+      type: object
+    PaymentOut:
+      properties:
+        amount_cents:
+          title: Amount Cents
+          type: integer
+        id:
+          format: uuid
+          title: Id
+          type: string
+        invoice_id:
+          format: uuid
+          title: Invoice Id
+          type: string
+        kind:
+          title: Kind
+          type: string
+        reversed_by_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Reversed By Id
+        transaction_id:
+          format: uuid
+          title: Transaction Id
+          type: string
+      required:
+      - id
+      - invoice_id
+      - transaction_id
+      - amount_cents
+      - kind
+      - reversed_by_id
+      title: PaymentOut
+      type: object
+    PaymentReversalCreate:
+      properties:
+        idempotency_key:
+          maxLength: 100
+          minLength: 1
+          title: Idempotency Key
+          type: string
+      required:
+      - idempotency_key
+      title: PaymentReversalCreate
+      type: object
+    PurchaseCreate:
+      additionalProperties: false
+      properties:
+        amount_cents:
+          exclusiveMinimum: 0.0
+          title: Amount Cents
+          type: integer
+        category_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Category Id
+        charge_kind:
+          default: purchase
+          title: Charge Kind
+          type: string
+        description:
+          anyOf:
+          - maxLength: 500
+            minLength: 1
+            type: string
+          - type: 'null'
+          title: Description
+        idempotency_key:
+          maxLength: 100
+          minLength: 1
+          title: Idempotency Key
+          type: string
+        installments:
+          default: 1
+          maximum: 48.0
+          minimum: 1.0
+          title: Installments
+          type: integer
+        purchase_date:
+          format: date
+          title: Purchase Date
+          type: string
+      required:
+      - idempotency_key
+      - amount_cents
+      - purchase_date
+      title: PurchaseCreate
       type: object
     RecentOut:
       properties:
@@ -978,82 +1305,6 @@ components:
       - occurred_at
       title: TransactionCreate
       type: object
-    TransactionOut:
-      properties:
-        amount_cents:
-          title: Amount Cents
-          type: integer
-        balance_after_cents:
-          default: 0
-          title: Balance After Cents
-          type: integer
-        balance_version:
-          default: 0
-          title: Balance Version
-          type: integer
-        category_id:
-          anyOf:
-          - format: uuid
-            type: string
-          - type: 'null'
-          title: Category Id
-        created_at:
-          format: date-time
-          title: Created At
-          type: string
-        description:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Description
-        external_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: External Id
-        fingerprint:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Fingerprint
-        id:
-          format: uuid
-          title: Id
-          type: string
-        kind:
-          title: Kind
-          type: string
-        occurred_at:
-          format: date-time
-          title: Occurred At
-          type: string
-        operation_type:
-          title: Operation Type
-          type: string
-        reversal_of_id:
-          anyOf:
-          - format: uuid
-            type: string
-          - type: 'null'
-          title: Reversal Of Id
-        status:
-          title: Status
-          type: string
-      required:
-      - id
-      - kind
-      - operation_type
-      - status
-      - amount_cents
-      - occurred_at
-      - description
-      - external_id
-      - fingerprint
-      - reversal_of_id
-      - category_id
-      - created_at
-      title: TransactionOut
-      type: object
     TransferCreate:
       additionalProperties: false
       properties:
@@ -1179,6 +1430,81 @@ components:
       - backup_codes
       title: VerifyTwoFactorResponse
       type: object
+    app__routers__cards__TransactionOut:
+      properties:
+        account_id:
+          format: uuid
+          title: Account Id
+          type: string
+        amount_cents:
+          title: Amount Cents
+          type: integer
+        charge_kind:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Charge Kind
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        id:
+          format: uuid
+          title: Id
+          type: string
+        installment_group_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Installment Group Id
+        installment_number:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Installment Number
+        installment_total:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Installment Total
+        kind:
+          title: Kind
+          type: string
+        occurred_at:
+          format: date-time
+          title: Occurred At
+          type: string
+        operation_type:
+          title: Operation Type
+          type: string
+        result_balance_after_cents:
+          title: Result Balance After Cents
+          type: integer
+        result_balance_version:
+          title: Result Balance Version
+          type: integer
+        status:
+          title: Status
+          type: string
+      required:
+      - id
+      - account_id
+      - amount_cents
+      - kind
+      - operation_type
+      - status
+      - occurred_at
+      - description
+      - charge_kind
+      - installment_group_id
+      - installment_number
+      - installment_total
+      - result_balance_after_cents
+      - result_balance_version
+      title: TransactionOut
+      type: object
     app__routers__dashboard__AccountBalanceOut:
       properties:
         account_id:
@@ -1225,6 +1551,82 @@ components:
       - current_balance_cents
       - projected_balance_cents
       title: AccountBalanceOut
+      type: object
+    app__schemas__transactions__TransactionOut:
+      properties:
+        amount_cents:
+          title: Amount Cents
+          type: integer
+        balance_after_cents:
+          default: 0
+          title: Balance After Cents
+          type: integer
+        balance_version:
+          default: 0
+          title: Balance Version
+          type: integer
+        category_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Category Id
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        external_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Id
+        fingerprint:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Fingerprint
+        id:
+          format: uuid
+          title: Id
+          type: string
+        kind:
+          title: Kind
+          type: string
+        occurred_at:
+          format: date-time
+          title: Occurred At
+          type: string
+        operation_type:
+          title: Operation Type
+          type: string
+        reversal_of_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Reversal Of Id
+        status:
+          title: Status
+          type: string
+      required:
+      - id
+      - kind
+      - operation_type
+      - status
+      - amount_cents
+      - occurred_at
+      - description
+      - external_id
+      - fingerprint
+      - reversal_of_id
+      - category_id
+      - created_at
+      title: TransactionOut
       type: object
   securitySchemes:
     OAuth2PasswordBearer:
@@ -1607,7 +2009,7 @@ paths:
             application/json:
               schema:
                 items:
-                  $ref: '#/components/schemas/TransactionOut'
+                  $ref: '#/components/schemas/app__schemas__transactions__TransactionOut'
                 title: Response List Transactions Accounts  Account Id  Transactions
                   Get
                 type: array
@@ -1644,7 +2046,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TransactionOut'
+                $ref: '#/components/schemas/app__schemas__transactions__TransactionOut'
           description: Successful Response
         '422':
           content:
@@ -1680,7 +2082,7 @@ paths:
             application/json:
               schema:
                 items:
-                  $ref: '#/components/schemas/TransactionOut'
+                  $ref: '#/components/schemas/app__schemas__transactions__TransactionOut'
                 title: Response Create Transfer Accounts  Account Id  Transactions
                   Transfers Post
                 type: array
@@ -1725,7 +2127,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TransactionOut'
+                $ref: '#/components/schemas/app__schemas__transactions__TransactionOut'
           description: Successful Response
         '422':
           content:
@@ -2005,6 +2407,445 @@ paths:
       summary: Register
       tags:
       - auth
+  /cards:
+    get:
+      operationId: list_cards_route_cards_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/CardOut'
+                title: Response List Cards Route Cards Get
+                type: array
+          description: Successful Response
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Cards Route
+      tags:
+      - cards
+    post:
+      operationId: create_card_route_cards_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Create Card Route
+      tags:
+      - cards
+  /cards/invoices/{invoice_id}:
+    get:
+      operationId: get_invoice_route_cards_invoices__invoice_id__get
+      parameters:
+      - in: path
+        name: invoice_id
+        required: true
+        schema:
+          format: uuid
+          title: Invoice Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Get Invoice Route
+      tags:
+      - cards
+  /cards/invoices/{invoice_id}/charges:
+    get:
+      operationId: invoice_charges_route_cards_invoices__invoice_id__charges_get
+      parameters:
+      - in: path
+        name: invoice_id
+        required: true
+        schema:
+          format: uuid
+          title: Invoice Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/app__routers__cards__TransactionOut'
+                title: Response Invoice Charges Route Cards Invoices  Invoice Id  Charges
+                  Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Invoice Charges Route
+      tags:
+      - cards
+  /cards/invoices/{invoice_id}/payments:
+    get:
+      operationId: invoice_payments_route_cards_invoices__invoice_id__payments_get
+      parameters:
+      - in: path
+        name: invoice_id
+        required: true
+        schema:
+          format: uuid
+          title: Invoice Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/PaymentOut'
+                title: Response Invoice Payments Route Cards Invoices  Invoice Id  Payments
+                  Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Invoice Payments Route
+      tags:
+      - cards
+    post:
+      operationId: pay_invoice_route_cards_invoices__invoice_id__payments_post
+      parameters:
+      - in: path
+        name: invoice_id
+        required: true
+        schema:
+          format: uuid
+          title: Invoice Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Pay Invoice Route
+      tags:
+      - cards
+  /cards/payments/{payment_id}/reversal:
+    post:
+      operationId: reverse_payment_route_cards_payments__payment_id__reversal_post
+      parameters:
+      - in: path
+        name: payment_id
+        required: true
+        schema:
+          format: uuid
+          title: Payment Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentReversalCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Reverse Payment Route
+      tags:
+      - cards
+  /cards/purchases/{purchase_transaction_id}/reversal:
+    post:
+      operationId: reverse_purchase_route_cards_purchases__purchase_transaction_id__reversal_post
+      parameters:
+      - in: path
+        name: purchase_transaction_id
+        required: true
+        schema:
+          format: uuid
+          title: Purchase Transaction Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentReversalCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/app__routers__cards__TransactionOut'
+                title: Response Reverse Purchase Route Cards Purchases  Purchase Transaction
+                  Id  Reversal Post
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Reverse Purchase Route
+      tags:
+      - cards
+  /cards/{card_id}:
+    delete:
+      operationId: archive_card_route_cards__card_id__delete
+      parameters:
+      - in: path
+        name: card_id
+        required: true
+        schema:
+          format: uuid
+          title: Card Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardArchive'
+        required: true
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Archive Card Route
+      tags:
+      - cards
+    get:
+      operationId: get_card_route_cards__card_id__get
+      parameters:
+      - in: path
+        name: card_id
+        required: true
+        schema:
+          format: uuid
+          title: Card Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Get Card Route
+      tags:
+      - cards
+    patch:
+      operationId: patch_card_route_cards__card_id__patch
+      parameters:
+      - in: path
+        name: card_id
+        required: true
+        schema:
+          format: uuid
+          title: Card Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardPatch'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Patch Card Route
+      tags:
+      - cards
+  /cards/{card_id}/exposure:
+    get:
+      operationId: card_exposure_route_cards__card_id__exposure_get
+      parameters:
+      - in: path
+        name: card_id
+        required: true
+        schema:
+          format: uuid
+          title: Card Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExposureOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Card Exposure Route
+      tags:
+      - cards
+  /cards/{card_id}/invoices:
+    get:
+      operationId: list_invoices_route_cards__card_id__invoices_get
+      parameters:
+      - in: path
+        name: card_id
+        required: true
+        schema:
+          format: uuid
+          title: Card Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/InvoiceOut'
+                title: Response List Invoices Route Cards  Card Id  Invoices Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Invoices Route
+      tags:
+      - cards
+  /cards/{card_id}/purchases:
+    post:
+      operationId: create_purchase_route_cards__card_id__purchases_post
+      parameters:
+      - in: path
+        name: card_id
+        required: true
+        schema:
+          format: uuid
+          title: Card Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/app__routers__cards__TransactionOut'
+                title: Response Create Purchase Route Cards  Card Id  Purchases Post
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Create Purchase Route
+      tags:
+      - cards
   /categories:
     get:
       operationId: list_categories_categories_get
