@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv@sha256:ee13d7fcccc31de713bf90b3474ae8682adf7f0dd5b6697c687e86b3fc8d11e6
+FROM ghcr.io/astral-sh/uv@sha256:10787c682e4184e4f290de1171fd4703dc63de99221f10fe1c99002ce7fa9acc
 
 WORKDIR /app
 RUN apk add --upgrade --no-cache libcrypto3=3.5.8-r0 libssl3=3.5.8-r0 sqlite-libs=3.53.4-r0
