@@ -29,15 +29,15 @@
     "verify": "pnpm quality && pnpm db:drift && pnpm run security:secrets:files && pnpm run security:secrets:history && pnpm expo:check && pnpm expo:doctor"
   },
   "devDependencies": {
-    "@commitlint/cli": "21.2.2",
-    "@commitlint/config-conventional": "21.2.2",
-    "@secretlint/secretlint-rule-pattern": "13.0.5",
-    "@secretlint/secretlint-rule-preset-recommend": "13.0.5",
-    "prettier": "3.9.6",
-    "secretlint": "13.0.5",
-    "turbo": "2.10.12",
+    "@commitlint/cli": "21.2.4",
+    "@commitlint/config-conventional": "21.2.4",
+    "@secretlint/secretlint-rule-pattern": "13.0.7",
+    "@secretlint/secretlint-rule-preset-recommend": "13.0.7",
+    "prettier": "3.9.10",
+    "secretlint": "13.0.7",
+    "turbo": "2.11.10",
     "typescript": "5.9.3",
-    "vitest": "4.1.11"
+    "vitest": "4.1.12"
   },
   "engines": {
     "node": ">=22"
